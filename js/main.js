@@ -10802,12 +10802,12 @@ var $elm_community$easing_functions$Ease$inQuint = function (time) {
 	return A2($elm$core$Basics$pow, time, 5);
 };
 var $elm_community$easing_functions$Ease$outQuint = $elm_community$easing_functions$Ease$flip($elm_community$easing_functions$Ease$inQuint);
-var $linuss$smooth_scroll$SmoothScroll$defaultConfig = {easing: $elm_community$easing_functions$Ease$outQuint, offset: 12, speed: 200};
+var $author$project$Scroll$Scroll$defaultConfig = {easing: $elm_community$easing_functions$Ease$outQuint, offset: 12, speed: 200, target: $elm$core$Maybe$Nothing};
 var $elm$core$Basics$abs = function (n) {
 	return (n < 0) ? (-n) : n;
 };
 var $elm$core$Basics$round = _Basics_round;
-var $linuss$smooth_scroll$Internal$SmoothScroll$animationSteps = F4(
+var $author$project$Scroll$Scroll$animationSteps = F4(
 	function (speed, easing, start, stop) {
 		var operator = (_Utils_cmp(start, stop) > 0) ? $elm$core$Basics$sub : $elm$core$Basics$add;
 		var diff = $elm$core$Basics$abs(start - stop);
@@ -10831,35 +10831,56 @@ var $linuss$smooth_scroll$Internal$SmoothScroll$animationSteps = F4(
 	});
 var $elm$browser$Browser$Dom$getElement = _Browser_getElement;
 var $elm$browser$Browser$Dom$getViewport = _Browser_withWindow(_Browser_getViewport);
+var $elm$browser$Browser$Dom$getViewportOf = _Browser_getViewportOf;
 var $elm$core$Tuple$pair = F2(
 	function (a, b) {
 		return _Utils_Tuple2(a, b);
 	});
 var $elm$browser$Browser$Dom$setViewport = _Browser_setViewport;
-var $linuss$smooth_scroll$SmoothScroll$scrollToWithOptions = F2(
+var $elm$browser$Browser$Dom$setViewportOf = _Browser_setViewportOf;
+var $author$project$Scroll$Scroll$scrollToWithOptions = F2(
 	function (config, id) {
+		var _v0 = function () {
+			var _v1 = config.target;
+			if (_v1.$ === 'Just') {
+				var targetId = _v1.a;
+				return _Utils_Tuple2(
+					$elm$browser$Browser$Dom$getViewportOf(targetId),
+					$elm$browser$Browser$Dom$setViewportOf(targetId));
+			} else {
+				return _Utils_Tuple2($elm$browser$Browser$Dom$getViewport, $elm$browser$Browser$Dom$setViewport);
+			}
+		}();
+		var getter = _v0.a;
+		var setter = _v0.b;
 		var tasks = F2(
 			function (from, to) {
 				return $elm$core$Task$sequence(
 					A2(
 						$elm$core$List$map,
-						$elm$browser$Browser$Dom$setViewport(0),
-						A4($linuss$smooth_scroll$Internal$SmoothScroll$animationSteps, config.speed, config.easing, from, to - config.offset)));
+						setter(0),
+						A4($author$project$Scroll$Scroll$animationSteps, config.speed, config.easing, from, to - config.offset)));
 			});
 		return A2(
 			$elm$core$Task$andThen,
-			function (_v0) {
-				var viewport = _v0.a.viewport;
-				var element = _v0.b.element;
+			function (_v2) {
+				var viewport = _v2.a.viewport;
+				var element = _v2.b.element;
 				return A2(tasks, viewport.y, element.y);
 			},
 			A3(
 				$elm$core$Task$map2,
 				$elm$core$Tuple$pair,
-				$elm$browser$Browser$Dom$getViewport,
+				getter,
 				$elm$browser$Browser$Dom$getElement(id)));
 	});
-var $linuss$smooth_scroll$SmoothScroll$scrollTo = $linuss$smooth_scroll$SmoothScroll$scrollToWithOptions($linuss$smooth_scroll$SmoothScroll$defaultConfig);
+var $author$project$Main$scrollTo = $author$project$Scroll$Scroll$scrollToWithOptions(
+	_Utils_update(
+		$author$project$Scroll$Scroll$defaultConfig,
+		{
+			offset: 50,
+			target: $elm$core$Maybe$Just('appContainer')
+		}));
 var $author$project$Main$update = F2(
 	function (msg, model) {
 		switch (msg.$) {
@@ -10893,7 +10914,7 @@ var $author$project$Main$update = F2(
 					A2(
 						$elm$core$Task$attempt,
 						$elm$core$Basics$always($author$project$Main$NoOp),
-						$linuss$smooth_scroll$SmoothScroll$scrollTo(id)));
+						$author$project$Main$scrollTo(id)));
 			default:
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
@@ -16602,6 +16623,8 @@ var $mdgriffith$elm_ui$Element$padding = function (x) {
 			x,
 			x));
 };
+var $mdgriffith$elm_ui$Internal$Flag$cursor = $mdgriffith$elm_ui$Internal$Flag$flag(21);
+var $mdgriffith$elm_ui$Element$pointer = A2($mdgriffith$elm_ui$Internal$Model$Class, $mdgriffith$elm_ui$Internal$Flag$cursor, $mdgriffith$elm_ui$Internal$Style$classes.cursorPointer);
 var $mdgriffith$elm_ui$Internal$Model$Px = function (a) {
 	return {$: 'Px', a: a};
 };
@@ -16660,7 +16683,8 @@ var $author$project$Main$menuView = function (model) {
 					A4($mdgriffith$elm_ui$Element$rgba, 0.8, 0.6, 0.7, 0.4)),
 					$mdgriffith$elm_ui$Element$padding(15),
 					$mdgriffith$elm_ui$Element$Events$onClick(
-					$author$project$Main$SmoothScroll(dest))
+					$author$project$Main$SmoothScroll(dest)),
+					$mdgriffith$elm_ui$Element$pointer
 				]),
 			$mdgriffith$elm_ui$Element$text(label));
 	};
@@ -16822,7 +16846,7 @@ var $author$project$Main$view = function (model) {
 											$mdgriffith$elm_ui$Element$htmlAttribute(
 											$elm$html$Html$Attributes$id('item1'))
 										]),
-									$mdgriffith$elm_ui$Element$text('this is a test')),
+									$mdgriffith$elm_ui$Element$text('item 1')),
 									A2(
 									$mdgriffith$elm_ui$Element$el,
 									_List_fromArray(
@@ -16845,7 +16869,7 @@ var $author$project$Main$view = function (model) {
 										]),
 									_List_fromArray(
 										[
-											$mdgriffith$elm_ui$Element$text('this is a test')
+											$mdgriffith$elm_ui$Element$text('item 2')
 										]))
 								])),
 							$mdgriffith$elm_ui$Element$text('footer')

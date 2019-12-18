@@ -14,12 +14,20 @@ import Element.Lazy exposing (lazy)
 import Element.Region as Region
 import Html as Html
 import Html.Attributes as HtmlAttr
-import SmoothScroll exposing (scrollTo)
+import Scroll.Scroll exposing (defaultConfig, scrollToWithOptions)
 import Task exposing (..)
 import Time exposing (..)
 
 
 port scroll : (Int -> msg) -> Sub msg
+
+
+scrollTo =
+    scrollToWithOptions
+        { defaultConfig
+            | target = Just "appContainer"
+            , offset = 50
+        }
 
 
 main =
@@ -110,7 +118,7 @@ view model =
                         , Background.color (col white)
                         , htmlAttribute <| HtmlAttr.id "item1"
                         ]
-                        (text "this is a test")
+                        (text "item 1")
                     , el
                         [ width fill
                         , height (px 500)
@@ -122,7 +130,7 @@ view model =
                         , Background.color (col white)
                         , htmlAttribute <| HtmlAttr.id "item2"
                         ]
-                        [ text "this is a test" ]
+                        [ text "item 2" ]
                     ]
                 , text "footer"
                 ]
@@ -166,6 +174,7 @@ menuView model =
                 , Background.color (Element.rgba 0.8 0.6 0.7 0.4)
                 , padding 15
                 , onClick (SmoothScroll dest)
+                , pointer
                 ]
                 (text label)
 
