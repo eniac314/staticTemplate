@@ -64,7 +64,7 @@ type Msg
     | NoOp
 
 
-init : Flags -> ( Model, Cmd msg )
+init : Flags -> ( Model, Cmd Msg )
 init flags =
     ( { menuVisible = True
       , scrollTop = flags.scrollTop
@@ -105,6 +105,7 @@ view model =
                 [ el
                     [ width fill
                     , height (px <| menuHeaderHeight model + 45)
+                    , htmlAttribute <| HtmlAttr.id "appTop"
                     ]
                     Element.none
                 , column

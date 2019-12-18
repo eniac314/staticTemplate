@@ -56,7 +56,7 @@ type alias Config =
 defaultConfig : Config
 defaultConfig =
     { offset = 12
-    , speed = 200
+    , speed = 50
     , easing = Ease.outQuint
     , target = Nothing
     }
@@ -98,7 +98,19 @@ scrollToWithOptions config id =
                 |> Task.sequence
     in
     Task.map2 Tuple.pair getter (Dom.getElement id)
-        |> Task.andThen (\( { viewport }, { element } ) -> tasks viewport.y element.y)
+        |> Task.andThen
+            (\( { viewport }, { element } ) ->
+                let
+                    yOffset =
+                        case config.target of
+                            Nothing ->
+                                0
+
+                            Just _ ->
+                                viewport.y
+                in
+                tasks viewport.y (yOffset + element.y)
+            )
 
 
 animationSteps : Int -> Ease.Easing -> Float -> Float -> List Float

@@ -10802,7 +10802,7 @@ var $elm_community$easing_functions$Ease$inQuint = function (time) {
 	return A2($elm$core$Basics$pow, time, 5);
 };
 var $elm_community$easing_functions$Ease$outQuint = $elm_community$easing_functions$Ease$flip($elm_community$easing_functions$Ease$inQuint);
-var $author$project$Scroll$Scroll$defaultConfig = {easing: $elm_community$easing_functions$Ease$outQuint, offset: 12, speed: 200, target: $elm$core$Maybe$Nothing};
+var $author$project$Scroll$Scroll$defaultConfig = {easing: $elm_community$easing_functions$Ease$outQuint, offset: 12, speed: 50, target: $elm$core$Maybe$Nothing};
 var $elm$core$Basics$abs = function (n) {
 	return (n < 0) ? (-n) : n;
 };
@@ -10866,7 +10866,15 @@ var $author$project$Scroll$Scroll$scrollToWithOptions = F2(
 			function (_v2) {
 				var viewport = _v2.a.viewport;
 				var element = _v2.b.element;
-				return A2(tasks, viewport.y, element.y);
+				var yOffset = function () {
+					var _v3 = config.target;
+					if (_v3.$ === 'Nothing') {
+						return 0;
+					} else {
+						return viewport.y;
+					}
+				}();
+				return A2(tasks, viewport.y, yOffset + element.y);
 			},
 			A3(
 				$elm$core$Task$map2,
@@ -16821,7 +16829,9 @@ var $author$project$Main$view = function (model) {
 									$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
 									$mdgriffith$elm_ui$Element$height(
 									$mdgriffith$elm_ui$Element$px(
-										$author$project$Main$menuHeaderHeight(model) + 45))
+										$author$project$Main$menuHeaderHeight(model) + 45)),
+									$mdgriffith$elm_ui$Element$htmlAttribute(
+									$elm$html$Html$Attributes$id('appTop'))
 								]),
 							$mdgriffith$elm_ui$Element$none),
 							A2(
