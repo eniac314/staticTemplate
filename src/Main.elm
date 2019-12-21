@@ -403,7 +403,7 @@ mainMenuView model =
                         height (px <| model.height - headerHeight model + mainMenuHeight model)
 
                       else
-                        noAttr
+                        height (px 0)
                     , width <|
                         if model.sideMenuOpen then
                             if model.width > 400 then

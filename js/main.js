@@ -17636,8 +17636,6 @@ var $mdgriffith$elm_ui$Element$newTabLink = F2(
 				_List_fromArray(
 					[label])));
 	});
-var $author$project$Main$noAttr = $mdgriffith$elm_ui$Element$htmlAttribute(
-	$elm$html$Html$Attributes$class(''));
 var $mdgriffith$elm_ui$Element$Events$onClick = A2($elm$core$Basics$composeL, $mdgriffith$elm_ui$Internal$Model$Attr, $elm$html$Html$Events$onClick);
 var $mdgriffith$elm_ui$Internal$Model$paddingName = F4(
 	function (top, right, bottom, left) {
@@ -17815,7 +17813,8 @@ var $author$project$Main$mainMenuView = function (model) {
 					[
 						model.sideMenuOpen ? $mdgriffith$elm_ui$Element$height(
 						$mdgriffith$elm_ui$Element$px(
-							(model.height - $author$project$Main$headerHeight(model)) + $author$project$Main$mainMenuHeight(model))) : $author$project$Main$noAttr,
+							(model.height - $author$project$Main$headerHeight(model)) + $author$project$Main$mainMenuHeight(model))) : $mdgriffith$elm_ui$Element$height(
+						$mdgriffith$elm_ui$Element$px(0)),
 						$mdgriffith$elm_ui$Element$width(
 						model.sideMenuOpen ? ((model.width > 400) ? $mdgriffith$elm_ui$Element$px(400) : $mdgriffith$elm_ui$Element$px(model.width)) : $mdgriffith$elm_ui$Element$px(0)),
 						$mdgriffith$elm_ui$Element$htmlAttribute(
