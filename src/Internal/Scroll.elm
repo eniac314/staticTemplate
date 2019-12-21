@@ -1,4 +1,4 @@
-module Scroll.Scroll exposing
+module Internal.Scroll exposing
     ( Config
     , defaultConfig
     , scrollTo

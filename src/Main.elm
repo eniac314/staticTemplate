@@ -1,10 +1,25 @@
 port module Main exposing (..)
 
+import Animation
+    exposing
+        ( Animation
+        , animate
+        , animation
+        , duration
+        , ease
+        , from
+        , getDuration
+        , isDone
+        , retarget
+        , speed
+        , to
+        )
 import Browser exposing (..)
-import Browser.Events exposing (onAnimationFrame, onResize)
+import Browser.Events exposing (Visibility(..), onAnimationFrame, onResize, onVisibilityChange)
 import Browser.Navigation as Nav
 import Color exposing (..)
 import Dict exposing (..)
+import Ease exposing (linear)
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
@@ -16,9 +31,13 @@ import Element.Lazy exposing (lazy)
 import Element.Region as Region
 import Html as Html
 import Html.Attributes as HtmlAttr
+import Html.Events as HtmlEvents exposing (on)
+import Internal.Scroll exposing (defaultConfig, scrollToWithOptions)
+import Internal.Streams exposing (..)
 import Ionicon
 import Ionicon.Android
-import Scroll.Scroll exposing (defaultConfig, scrollToWithOptions)
+import Json.Decode as Decode
+import Set exposing (..)
 import Task exposing (..)
 import Time exposing (..)
 import Url as Url
@@ -29,25 +48,28 @@ import Url.Parser as UrlParser exposing (..)
 port scroll : (Int -> msg) -> Sub msg
 
 
-scrollTo model id =
-    scrollToWithOptions
-        { defaultConfig
-            | target = Just "appContainer"
-            , offset =
-                if id == "appTop" then
-                    headerHeight model + mainMenuHeight model
+subscriptions model =
+    Sub.batch
+        [ scroll Scrolled
+        , onResize WinResize
+        , onVisibilityChange VisibilityChange
+        , if model.currentAnimation == Nothing then
+            Sub.none
 
-                else
-                    mainMenuHeight model
+          else
+            onAnimationFrame Tick
+        , if model.animate && (model.visibility == Visible) then
+            Time.every 6000 Animate
 
-            --if model.device.class == Phone || model.device.class == Tablet then
-            --    mainMenuHeight model
-            --else if model.headerVisible then
-            --    headerHeight model + mainMenuHeight model
-            --else
-            --    mainMenuHeight model
-        }
-        id
+          else
+            Sub.none
+        , case model.updateOnNextFrame of
+            Just msg ->
+                onAnimationFrame (\_ -> SyncedUpdate msg)
+
+            Nothing ->
+                Sub.none
+        ]
 
 
 main =
@@ -67,11 +89,23 @@ type alias Model =
     , device : Device
     , width : Int
     , height : Int
+    , visibility : Visibility
+    , animate : Bool
+    , currentAnimation : Maybe Animation
+    , clock : Float
     , key : Nav.Key
     , url : Url.Url
     , sideMenuOpen : Bool
     , updateOnNextFrame : Maybe Msg
     , currentPosition : { path : Path, anchor : Maybe String }
+    , loaded : Set String
+    , images : BiStream (List Image)
+    }
+
+
+type alias Image =
+    { src : String
+    , id : Int
     }
 
 
@@ -86,12 +120,15 @@ type alias Flags =
 type Msg
     = ChangeUrl Url.Url
     | ClickedLink UrlRequest
+    | Animate Posix
     | Tick Posix
     | Scrolled Int
     | WinResize Int Int
+    | VisibilityChange Visibility
     | SmoothScroll String
     | SyncedUpdate Msg
     | ToogleSideMenu
+    | ImgLoaded String
     | NoOp
 
 
@@ -118,16 +155,36 @@ type Link
 
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
+    let
+        imgs =
+            [ "/assets/images/pic1.jpg"
+            , "/assets/images/pic2.jpg"
+            , "/assets/images/pic3.jpg"
+            ]
+
+        stream =
+            List.indexedMap
+                (\n s -> Image s n)
+                imgs
+                |> (\xs -> biStream xs (Image "" -1))
+                |> chunkBiStream 3
+    in
     ( { headerVisible = True
       , scrollTop = flags.scrollTop
       , device = classifyDevice { width = flags.width, height = flags.height }
       , width = flags.width
       , height = flags.height
+      , visibility = Visible
+      , animate = True
+      , currentAnimation = Nothing
+      , clock = toFloat flags.currentTime
       , key = key
       , url = url
       , sideMenuOpen = False
       , updateOnNextFrame = Nothing
       , currentPosition = { path = "/home", anchor = Nothing }
+      , loaded = Set.empty
+      , images = stream
       }
     , Cmd.none
     )
@@ -179,8 +236,51 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
+        Animate time ->
+            let
+                newClock =
+                    toFloat <| posixToMillis time
+
+                newAnim =
+                    case model.currentAnimation of
+                        Nothing ->
+                            Just
+                                (animation newClock
+                                    |> from 1
+                                    |> to 0
+                                    |> duration 1500
+                                    |> ease Ease.linear
+                                )
+
+                        _ ->
+                            Nothing
+            in
+            ( { model | currentAnimation = newAnim }, Cmd.none )
+
         Tick time ->
-            ( model, Cmd.none )
+            let
+                newClock =
+                    toFloat <| posixToMillis time
+
+                ( newAnim, newImages ) =
+                    case model.currentAnimation of
+                        Just anim ->
+                            if isDone newClock anim then
+                                ( Nothing, left (.images model) )
+
+                            else
+                                ( model.currentAnimation, model.images )
+
+                        _ ->
+                            ( model.currentAnimation, model.images )
+            in
+            ( { model
+                | clock = newClock
+                , currentAnimation = newAnim
+                , images = newImages
+              }
+            , Cmd.none
+            )
 
         Scrolled n ->
             ( { model
@@ -199,6 +299,9 @@ update msg model =
             , Cmd.none
             )
 
+        VisibilityChange visibility ->
+            ( { model | visibility = visibility }, Cmd.none )
+
         SmoothScroll id ->
             ( model, Task.attempt (always NoOp) (scrollTo model id) )
 
@@ -208,21 +311,25 @@ update msg model =
         ToogleSideMenu ->
             ( { model | sideMenuOpen = not model.sideMenuOpen }, Cmd.none )
 
+        ImgLoaded src ->
+            ( { model | loaded = Set.insert src model.loaded }, Cmd.none )
+
         NoOp ->
             ( model, Cmd.none )
 
 
-subscriptions model =
-    Sub.batch
-        [ scroll Scrolled
-        , onResize WinResize
-        , case model.updateOnNextFrame of
-            Just msg ->
-                onAnimationFrame (\_ -> SyncedUpdate msg)
+scrollTo model id =
+    scrollToWithOptions
+        { defaultConfig
+            | target = Just "appContainer"
+            , offset =
+                if id == "appTop" then
+                    headerHeight model + mainMenuHeight model
 
-            Nothing ->
-                Sub.none
-        ]
+                else
+                    mainMenuHeight model
+        }
+        id
 
 
 
@@ -237,11 +344,7 @@ view model =
             [ width fill
             , height (px model.height)
             , Font.size 16
-            , Background.image <|
-                "https://via.placeholder.com/"
-                    ++ String.fromInt model.width
-                    ++ "x"
-                    ++ String.fromInt model.height
+            , behindContent (galleryView model)
             , clip
             , inFront <| mainMenuView model
             ]
@@ -250,6 +353,7 @@ view model =
                 , scrollbarY
                 , htmlAttribute <| HtmlAttr.id "appContainer"
                 , htmlAttribute <| HtmlAttr.style "-webkit-overflow-scrolling" "touch"
+                , height (minimum (model.height - (headerHeight model + mainMenuHeight model)) fill)
                 ]
                 [ el
                     [ width fill
@@ -266,6 +370,83 @@ view model =
             )
         ]
     }
+
+
+
+-------------------------------------------------------------------------------
+-- Background slide show
+
+
+galleryView model =
+    el
+        [ centerX
+        , clipX
+        , width fill
+        , Background.color (col lightGrey)
+        ]
+        (chunkView model (current model.images))
+
+
+chunkView model chunk =
+    let
+        frontOpacity =
+            case model.currentAnimation of
+                Just anim ->
+                    alpha <| animate model.clock anim
+
+                _ ->
+                    alpha 1
+
+        backOpacity =
+            case model.currentAnimation of
+                Just anim ->
+                    alpha <| 1 - animate model.clock anim
+
+                _ ->
+                    alpha 0
+    in
+    case chunk of
+        l :: c :: r :: [] ->
+            row
+                [ moveLeft (toFloat model.width)
+                ]
+                [ backgroundPicView model l []
+                , el
+                    [ behindContent
+                        (backgroundPicView model l [ backOpacity ])
+                    ]
+                    (backgroundPicView model c [ frontOpacity ])
+                , backgroundPicView model r []
+                ]
+
+        _ ->
+            Element.none
+
+
+backgroundPicView model { src } attrs =
+    if Set.member src model.loaded then
+        el
+            ([ Background.image src
+             , height (px model.height)
+             , width (px model.width)
+             ]
+                ++ attrs
+            )
+            Element.none
+
+    else
+        column
+            [ width fill
+            , height (px model.height)
+            ]
+            [ html <|
+                Html.img
+                    [ HtmlAttr.hidden True
+                    , HtmlEvents.on "load" (Decode.succeed (ImgLoaded src))
+                    , HtmlAttr.src src
+                    ]
+                    []
+            ]
 
 
 
@@ -317,7 +498,7 @@ menuItems =
 mainMenuView model =
     let
         mainMenuBackgroundColor =
-            Element.rgba 0.4 0.5 0.7 0.4
+            Element.rgb255 181 166 189
 
         itemLenght =
             max 100 (model.width // List.length menuItems)
@@ -327,7 +508,6 @@ mainMenuView model =
                 itemStyle =
                     [ width (px itemLenght)
                     , alignLeft
-                    , Background.color (Element.rgba 0.8 0.6 0.7 0.4)
                     , padding 15
                     , pointer
                     ]
@@ -399,12 +579,7 @@ mainMenuView model =
                         sideMenuButton
                     ]
                 , column
-                    [ if model.sideMenuOpen then
-                        height (px <| model.height - headerHeight model + mainMenuHeight model)
-
-                      else
-                        height (px 0)
-                    , width <|
+                    [ width <|
                         if model.sideMenuOpen then
                             if model.width > 400 then
                                 px 400
@@ -414,10 +589,16 @@ mainMenuView model =
 
                         else
                             px 0
+                    , if model.sideMenuOpen then
+                        height (px <| model.height - headerHeight model + mainMenuHeight model)
+
+                      else
+                        height (px 0)
+                    , alignRight
+                    , scrollbarY
                     , htmlAttribute <| HtmlAttr.style "transition" "width 0.3s"
                     , Background.color (col white)
                     , clip
-                    , alignRight
                     ]
                     (List.map itemView menuItems)
                 ]
@@ -441,7 +622,7 @@ mainMenuView model =
                 , row
                     [ width fill
                     , height (px <| mainMenuHeight model)
-                    , Background.color (Element.rgba 0.4 0.5 0.7 0.4)
+                    , Background.color (Element.rgb255 166 174 195)
                     ]
                     (List.map itemView menuItems)
                 ]
@@ -482,6 +663,18 @@ footerView model =
 
 
 -------------------------------------------------------------------------------
+
+
+defaultwidth =
+    width (maximum 1000 fill)
+
+
+defaultContainerStyle =
+    [ defaultwidth
+    , centerX
+    , padding 15
+    , spacing 15
+    ]
 
 
 noAttr =
@@ -547,28 +740,60 @@ content =
         [ ( "/home"
           , column
                 [ width fill
-                , height (px 2000)
                 , spacing 15
                 ]
                 [ el
                     [ width fill
+                    , height (px 200)
+                    ]
+                    Element.none
+                , el
+                    [ width fill
                     , padding 15
                     , Background.color (col white)
                     , htmlAttribute <| HtmlAttr.id "item1"
+                    , Background.color (col white)
                     ]
-                    (text "item 1")
+                    (column
+                        defaultContainerStyle
+                        [ el
+                            [ Font.bold
+                            , Font.size 22
+                            ]
+                            (text "Item 1")
+                        , paragraph
+                            []
+                            [ text "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean auctor eleifend lorem in dapibus. Proin risus ligula, semper sed mattis nec, tempor eget libero. Sed varius semper venenatis. Curabitur quis mauris a nulla gravida ullamcorper quis vel ipsum. Maecenas nec sapien vel ex bibendum sollicitudin id et est. Etiam placerat non arcu eget fringilla. Fusce accumsan ipsum et sagittis dictum. Nullam varius nunc et tortor volutpat, ut feugiat purus convallis. Etiam id felis orci. Vivamus ut nunc magna. Proin sed ultrices massa, quis finibus mauris. Nulla lorem sem, tristique nec malesuada eu, tincidunt sed nunc. Integer nec sapien eget ante hendrerit viverra congue non eros. Suspendisse consectetur sem nec orci consectetur, eget congue dui facilisis. Praesent nec varius nulla. Vestibulum tincidunt metus sit amet nibh convallis, eget rutrum arcu pellentesque. " ]
+                        ]
+                    )
                 , el
                     [ width fill
-                    , height (px 500)
+                    , height (px 200)
                     ]
                     Element.none
-                , paragraph
+                , el
                     [ width fill
                     , padding 15
                     , Background.color (col white)
                     , htmlAttribute <| HtmlAttr.id "item2"
+                    , Background.color (col white)
                     ]
-                    [ text "item 2" ]
+                    (column
+                        defaultContainerStyle
+                        [ el
+                            [ Font.bold
+                            , Font.size 22
+                            ]
+                            (text "Item 2")
+                        , paragraph
+                            []
+                            [ text "Proin vitae lobortis leo. Maecenas sed rhoncus mi, at lobortis augue. Sed sollicitudin libero non varius aliquet. Quisque eget euismod ligula, sodales tristique nunc. Maecenas diam leo, pulvinar quis lobortis at, rutrum at turpis. Curabitur ac lorem vitae tellus rhoncus finibus vitae in arcu. Maecenas eleifend diam ut interdum rutrum. Ut eget pharetra dui. Quisque eget nibh sit amet mauris tincidunt dapibus at at diam. Nunc euismod leo ligula, eget mattis mi porttitor eu. Quisque nec justo at augue cursus cursus. Sed odio turpis, laoreet nec eleifend nec, venenatis eu enim. Nullam a felis dolor. Phasellus varius ultrices dui vulputate dictum. Integer magna arcu, porta eget orci ut, rhoncus consectetur turpis. Integer sodales tortor urna, eu maximus ipsum ullamcorper et. " ]
+                        , paragraph
+                            []
+                            [ text "Interdum et malesuada fames ac ante ipsum primis in faucibus. Morbi convallis consectetur vulputate. Integer ut mauris mauris. Sed ornare aliquam tortor id eleifend. Integer facilisis elit id erat dapibus, eget efficitur odio elementum. Curabitur in lacus ultrices, convallis ex et, tristique ante. Morbi at pharetra lorem, tincidunt viverra ligula. Vestibulum pharetra magna a turpis fringilla finibus. Nullam nec diam nulla. Aliquam a elit ullamcorper, auctor diam in, maximus libero. "
+                            ]
+                        ]
+                    )
                 ]
           )
         ]
