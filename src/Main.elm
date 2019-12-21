@@ -86,6 +86,7 @@ main =
 type alias Model =
     { headerVisible : Bool
     , scrollTop : Int
+    , scrollbarWidth : Int
     , device : Device
     , width : Int
     , height : Int
@@ -114,6 +115,7 @@ type alias Flags =
     , width : Int
     , height : Int
     , scrollTop : Int
+    , scrollbarWidth : Int
     }
 
 
@@ -171,6 +173,7 @@ init flags url key =
     in
     ( { headerVisible = True
       , scrollTop = flags.scrollTop
+      , scrollbarWidth = flags.scrollbarWidth
       , device = classifyDevice { width = flags.width, height = flags.height }
       , width = flags.width
       , height = flags.height
@@ -285,7 +288,14 @@ update msg model =
         Scrolled n ->
             ( { model
                 | scrollTop = n
-                , headerVisible = n == 0
+                , headerVisible =
+                    n == 0
+
+                --if model.headerVisible then
+                --    n == 0
+                --else
+                --    (model.scrollTop > mainMenuHeight model + headerHeight model)
+                --        && (n <= mainMenuHeight model + headerHeight model)
               }
             , Cmd.none
             )
@@ -345,15 +355,15 @@ view model =
             , height (px model.height)
             , Font.size 16
             , behindContent (galleryView model)
-            , clip
             , inFront <| mainMenuView model
+            , clip
             ]
             (column
                 [ width fill
-                , scrollbarY
+                , height (minimum (model.height - (headerHeight model + mainMenuHeight model)) fill)
                 , htmlAttribute <| HtmlAttr.id "appContainer"
                 , htmlAttribute <| HtmlAttr.style "-webkit-overflow-scrolling" "touch"
-                , height (minimum (model.height - (headerHeight model + mainMenuHeight model)) fill)
+                , scrollbarY
                 ]
                 [ el
                     [ width fill
@@ -428,7 +438,7 @@ backgroundPicView model { src } attrs =
         el
             ([ Background.image src
              , height (px model.height)
-             , width (px model.width)
+             , width (px <| model.width)
              ]
                 ++ attrs
             )
@@ -501,13 +511,14 @@ mainMenuView model =
             Element.rgb255 181 166 189
 
         itemLenght =
-            max 100 (model.width // List.length menuItems)
+            max 100 ((model.width - 40) // List.length menuItems)
 
         itemView itemLink =
             let
                 itemStyle =
                     [ width (px itemLenght)
-                    , alignLeft
+
+                    --, alignLeft
                     , padding 15
                     , pointer
                     ]
@@ -522,14 +533,14 @@ mainMenuView model =
                                 (String.split "/" path)
                                 []
                                 mbAnchor
-                        , label = text label
+                        , label = el [ centerX ] (text label)
                         }
 
                 External externalUrl label ->
                     newTabLink
                         itemStyle
                         { url = externalUrl
-                        , label = text label
+                        , label = el [ centerX ] (text label)
                         }
 
         sideMenuButton =
@@ -597,6 +608,8 @@ mainMenuView model =
                     , alignRight
                     , scrollbarY
                     , htmlAttribute <| HtmlAttr.style "transition" "width 0.3s"
+
+                    --, htmlAttribute <| HtmlAttr.style "transition" "height 0.3s"
                     , Background.color (col white)
                     , clip
                     ]
@@ -605,7 +618,8 @@ mainMenuView model =
 
         desktopView =
             column
-                [ width fill ]
+                [ width (px <| model.width - model.scrollbarWidth)
+                ]
                 [ el
                     [ Background.color mainMenuBackgroundColor
                     , width fill
@@ -620,7 +634,7 @@ mainMenuView model =
                     ]
                     (el [ centerX ] (logoView 120))
                 , row
-                    [ width fill
+                    [ width fill --(px <| model.width - 12)
                     , height (px <| mainMenuHeight model)
                     , Background.color (Element.rgb255 166 174 195)
                     ]
@@ -743,8 +757,7 @@ content =
                 , spacing 15
                 ]
                 [ el
-                    [ width fill
-                    , height (px 200)
+                    [ height (px 200)
                     ]
                     Element.none
                 , el
@@ -763,12 +776,11 @@ content =
                             (text "Item 1")
                         , paragraph
                             []
-                            [ text "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean auctor eleifend lorem in dapibus. Proin risus ligula, semper sed mattis nec, tempor eget libero. Sed varius semper venenatis. Curabitur quis mauris a nulla gravida ullamcorper quis vel ipsum. Maecenas nec sapien vel ex bibendum sollicitudin id et est. Etiam placerat non arcu eget fringilla. Fusce accumsan ipsum et sagittis dictum. Nullam varius nunc et tortor volutpat, ut feugiat purus convallis. Etiam id felis orci. Vivamus ut nunc magna. Proin sed ultrices massa, quis finibus mauris. Nulla lorem sem, tristique nec malesuada eu, tincidunt sed nunc. Integer nec sapien eget ante hendrerit viverra congue non eros. Suspendisse consectetur sem nec orci consectetur, eget congue dui facilisis. Praesent nec varius nulla. Vestibulum tincidunt metus sit amet nibh convallis, eget rutrum arcu pellentesque. " ]
+                            [ text "Proin vitae lobortis leo. Maecenas sed rhoncus mi, at lobortis augue. Sed sollicitudin libero non varius aliquet. Quisque eget euismod ligula, sodales tristique nunc. Maecenas diam leo, pulvinar quis lobortis at, rutrum at turpis. Curabitur ac lorem vitae tellus rhoncus finibus vitae in arcu. Maecenas eleifend diam ut interdum rutrum. Ut eget pharetra dui. Quisque eget nibh sit amet mauris tincidunt dapibus at at diam. Nunc euismod leo ligula, eget mattis mi porttitor eu. Quisque nec justo at augue cursus cursus. Sed odio turpis, laoreet nec eleifend nec, venenatis eu enim. Nullam a felis dolor. Phasellus varius ultrices dui vulputate dictum. Integer magna arcu, porta eget orci ut, rhoncus consectetur turpis. Integer sodales tortor urna, eu maximus ipsum ullamcorper et. " ]
                         ]
                     )
                 , el
-                    [ width fill
-                    , height (px 200)
+                    [ height (px 200)
                     ]
                     Element.none
                 , el

@@ -10852,6 +10852,7 @@ var $author$project$Main$init = F3(
 				key: key,
 				loaded: $elm$core$Set$empty,
 				scrollTop: flags.scrollTop,
+				scrollbarWidth: flags.scrollbarWidth,
 				sideMenuOpen: false,
 				updateOnNextFrame: $elm$core$Maybe$Nothing,
 				url: url,
@@ -17667,7 +17668,6 @@ var $author$project$Main$content = $elm$core$Dict$fromList(
 						$mdgriffith$elm_ui$Element$el,
 						_List_fromArray(
 							[
-								$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
 								$mdgriffith$elm_ui$Element$height(
 								$mdgriffith$elm_ui$Element$px(200))
 							]),
@@ -17703,14 +17703,13 @@ var $author$project$Main$content = $elm$core$Dict$fromList(
 									_List_Nil,
 									_List_fromArray(
 										[
-											$mdgriffith$elm_ui$Element$text('Lorem ipsum dolor sit amet, consectetur adipiscing elit. Aenean auctor eleifend lorem in dapibus. Proin risus ligula, semper sed mattis nec, tempor eget libero. Sed varius semper venenatis. Curabitur quis mauris a nulla gravida ullamcorper quis vel ipsum. Maecenas nec sapien vel ex bibendum sollicitudin id et est. Etiam placerat non arcu eget fringilla. Fusce accumsan ipsum et sagittis dictum. Nullam varius nunc et tortor volutpat, ut feugiat purus convallis. Etiam id felis orci. Vivamus ut nunc magna. Proin sed ultrices massa, quis finibus mauris. Nulla lorem sem, tristique nec malesuada eu, tincidunt sed nunc. Integer nec sapien eget ante hendrerit viverra congue non eros. Suspendisse consectetur sem nec orci consectetur, eget congue dui facilisis. Praesent nec varius nulla. Vestibulum tincidunt metus sit amet nibh convallis, eget rutrum arcu pellentesque. ')
+											$mdgriffith$elm_ui$Element$text('Proin vitae lobortis leo. Maecenas sed rhoncus mi, at lobortis augue. Sed sollicitudin libero non varius aliquet. Quisque eget euismod ligula, sodales tristique nunc. Maecenas diam leo, pulvinar quis lobortis at, rutrum at turpis. Curabitur ac lorem vitae tellus rhoncus finibus vitae in arcu. Maecenas eleifend diam ut interdum rutrum. Ut eget pharetra dui. Quisque eget nibh sit amet mauris tincidunt dapibus at at diam. Nunc euismod leo ligula, eget mattis mi porttitor eu. Quisque nec justo at augue cursus cursus. Sed odio turpis, laoreet nec eleifend nec, venenatis eu enim. Nullam a felis dolor. Phasellus varius ultrices dui vulputate dictum. Integer magna arcu, porta eget orci ut, rhoncus consectetur turpis. Integer sodales tortor urna, eu maximus ipsum ullamcorper et. ')
 										]))
 								]))),
 						A2(
 						$mdgriffith$elm_ui$Element$el,
 						_List_fromArray(
 							[
-								$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
 								$mdgriffith$elm_ui$Element$height(
 								$mdgriffith$elm_ui$Element$px(200))
 							]),
@@ -18666,13 +18665,12 @@ var $author$project$Main$mainMenuView = function (model) {
 	var itemLenght = A2(
 		$elm$core$Basics$max,
 		100,
-		(model.width / $elm$core$List$length($author$project$Main$menuItems)) | 0);
+		((model.width - 40) / $elm$core$List$length($author$project$Main$menuItems)) | 0);
 	var itemView = function (itemLink) {
 		var itemStyle = _List_fromArray(
 			[
 				$mdgriffith$elm_ui$Element$width(
 				$mdgriffith$elm_ui$Element$px(itemLenght)),
-				$mdgriffith$elm_ui$Element$alignLeft,
 				$mdgriffith$elm_ui$Element$padding(15),
 				$mdgriffith$elm_ui$Element$pointer
 			]);
@@ -18684,7 +18682,11 @@ var $author$project$Main$mainMenuView = function (model) {
 				$mdgriffith$elm_ui$Element$link,
 				itemStyle,
 				{
-					label: $mdgriffith$elm_ui$Element$text(label),
+					label: A2(
+						$mdgriffith$elm_ui$Element$el,
+						_List_fromArray(
+							[$mdgriffith$elm_ui$Element$centerX]),
+						$mdgriffith$elm_ui$Element$text(label)),
 					url: A4(
 						$elm$url$Url$Builder$custom,
 						$elm$url$Url$Builder$Relative,
@@ -18699,7 +18701,11 @@ var $author$project$Main$mainMenuView = function (model) {
 				$mdgriffith$elm_ui$Element$newTabLink,
 				itemStyle,
 				{
-					label: $mdgriffith$elm_ui$Element$text(label),
+					label: A2(
+						$mdgriffith$elm_ui$Element$el,
+						_List_fromArray(
+							[$mdgriffith$elm_ui$Element$centerX]),
+						$mdgriffith$elm_ui$Element$text(label)),
 					url: externalUrl
 				});
 		}
@@ -18756,7 +18762,8 @@ var $author$project$Main$mainMenuView = function (model) {
 		$mdgriffith$elm_ui$Element$column,
 		_List_fromArray(
 			[
-				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+				$mdgriffith$elm_ui$Element$width(
+				$mdgriffith$elm_ui$Element$px(model.width - model.scrollbarWidth))
 			]),
 		_List_fromArray(
 			[
@@ -18825,25 +18832,25 @@ var $author$project$Main$view = function (model) {
 						$mdgriffith$elm_ui$Element$Font$size(16),
 						$mdgriffith$elm_ui$Element$behindContent(
 						$author$project$Main$galleryView(model)),
-						$mdgriffith$elm_ui$Element$clip,
 						$mdgriffith$elm_ui$Element$inFront(
-						$author$project$Main$mainMenuView(model))
+						$author$project$Main$mainMenuView(model)),
+						$mdgriffith$elm_ui$Element$clip
 					]),
 				A2(
 					$mdgriffith$elm_ui$Element$column,
 					_List_fromArray(
 						[
 							$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
-							$mdgriffith$elm_ui$Element$scrollbarY,
-							$mdgriffith$elm_ui$Element$htmlAttribute(
-							$elm$html$Html$Attributes$id('appContainer')),
-							$mdgriffith$elm_ui$Element$htmlAttribute(
-							A2($elm$html$Html$Attributes$style, '-webkit-overflow-scrolling', 'touch')),
 							$mdgriffith$elm_ui$Element$height(
 							A2(
 								$mdgriffith$elm_ui$Element$minimum,
 								model.height - ($author$project$Main$headerHeight(model) + $author$project$Main$mainMenuHeight(model)),
-								$mdgriffith$elm_ui$Element$fill))
+								$mdgriffith$elm_ui$Element$fill)),
+							$mdgriffith$elm_ui$Element$htmlAttribute(
+							$elm$html$Html$Attributes$id('appContainer')),
+							$mdgriffith$elm_ui$Element$htmlAttribute(
+							A2($elm$html$Html$Attributes$style, '-webkit-overflow-scrolling', 'touch')),
+							$mdgriffith$elm_ui$Element$scrollbarY
 						]),
 					_List_fromArray(
 						[
@@ -18877,20 +18884,25 @@ _Platform_export({'Main':{'init':$author$project$Main$main(
 		function (width) {
 			return A2(
 				$elm$json$Json$Decode$andThen,
-				function (scrollTop) {
+				function (scrollbarWidth) {
 					return A2(
 						$elm$json$Json$Decode$andThen,
-						function (height) {
+						function (scrollTop) {
 							return A2(
 								$elm$json$Json$Decode$andThen,
-								function (currentTime) {
-									return $elm$json$Json$Decode$succeed(
-										{currentTime: currentTime, height: height, scrollTop: scrollTop, width: width});
+								function (height) {
+									return A2(
+										$elm$json$Json$Decode$andThen,
+										function (currentTime) {
+											return $elm$json$Json$Decode$succeed(
+												{currentTime: currentTime, height: height, scrollTop: scrollTop, scrollbarWidth: scrollbarWidth, width: width});
+										},
+										A2($elm$json$Json$Decode$field, 'currentTime', $elm$json$Json$Decode$int));
 								},
-								A2($elm$json$Json$Decode$field, 'currentTime', $elm$json$Json$Decode$int));
+								A2($elm$json$Json$Decode$field, 'height', $elm$json$Json$Decode$int));
 						},
-						A2($elm$json$Json$Decode$field, 'height', $elm$json$Json$Decode$int));
+						A2($elm$json$Json$Decode$field, 'scrollTop', $elm$json$Json$Decode$int));
 				},
-				A2($elm$json$Json$Decode$field, 'scrollTop', $elm$json$Json$Decode$int));
+				A2($elm$json$Json$Decode$field, 'scrollbarWidth', $elm$json$Json$Decode$int));
 		},
 		A2($elm$json$Json$Decode$field, 'width', $elm$json$Json$Decode$int)))({"versions":{"elm":"0.19.1"},"types":{"message":"Main.Msg","aliases":{"Url.Url":{"args":[],"type":"{ protocol : Url.Protocol, host : String.String, port_ : Maybe.Maybe Basics.Int, path : String.String, query : Maybe.Maybe String.String, fragment : Maybe.Maybe String.String }"}},"unions":{"Main.Msg":{"args":[],"tags":{"ChangeUrl":["Url.Url"],"ClickedLink":["Browser.UrlRequest"],"Animate":["Time.Posix"],"Tick":["Time.Posix"],"Scrolled":["Basics.Int"],"WinResize":["Basics.Int","Basics.Int"],"VisibilityChange":["Browser.Events.Visibility"],"SmoothScroll":["String.String"],"SyncedUpdate":["Main.Msg"],"ToogleSideMenu":[],"ImgLoaded":["String.String"],"NoOp":[]}},"Basics.Int":{"args":[],"tags":{"Int":[]}},"Maybe.Maybe":{"args":["a"],"tags":{"Just":["a"],"Nothing":[]}},"Time.Posix":{"args":[],"tags":{"Posix":["Basics.Int"]}},"Url.Protocol":{"args":[],"tags":{"Http":[],"Https":[]}},"String.String":{"args":[],"tags":{"String":[]}},"Browser.UrlRequest":{"args":[],"tags":{"Internal":["Url.Url"],"External":["String.String"]}},"Browser.Events.Visibility":{"args":[],"tags":{"Visible":[],"Hidden":[]}}}}})}});}(this));

@@ -15,9 +15,9 @@
     var currentTime = new Date().getTime();
     var width = window.innerWidth;
     var height = window.innerHeight;	
-    
+    var scrollbarWidth = getScrollbarWidth() ||  0;   
 
-    var app = Elm.Main.init({flags: {currentTime: currentTime, width: width, height: height, scrollTop: 0}});
+    var app = Elm.Main.init({flags: {currentTime: currentTime, width: width, height: height, scrollTop: 0, scrollbarWidth: scrollbarWidth}});
     var appContainer = document.getElementById("appContainer");
     
     // var scrollTop = parseInt(window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0);
@@ -49,6 +49,26 @@
       app.ports.scroll.send(scrollTop);
     }
     
+    function getScrollbarWidth() {
+      // Creating invisible container
+      const outer = document.createElement('div');
+      outer.style.visibility = 'hidden';
+      outer.style.overflow = 'scroll'; // forcing scrollbar to appear
+      outer.style.msOverflowStyle = 'scrollbar'; // needed for WinJS apps
+      document.body.appendChild(outer);
+
+      // Creating inner element and placing it in the container
+      const inner = document.createElement('div');
+      outer.appendChild(inner);
+
+      // Calculating difference between container's full width and the child width
+      const scrollbarWidth = (outer.offsetWidth - inner.offsetWidth);
+
+      // Removing temporary elements from the DOM
+      outer.parentNode.removeChild(outer);
+
+      return scrollbarWidth;
+    }
 
   </script>
    
