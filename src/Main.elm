@@ -16,6 +16,8 @@ import Element.Lazy exposing (lazy)
 import Element.Region as Region
 import Html as Html
 import Html.Attributes as HtmlAttr
+import Ionicon
+import Ionicon.Android
 import Scroll.Scroll exposing (defaultConfig, scrollToWithOptions)
 import Task exposing (..)
 import Time exposing (..)
@@ -27,12 +29,25 @@ import Url.Parser as UrlParser exposing (..)
 port scroll : (Int -> msg) -> Sub msg
 
 
-scrollTo =
+scrollTo model id =
     scrollToWithOptions
         { defaultConfig
             | target = Just "appContainer"
-            , offset = 50
+            , offset =
+                if id == "appTop" then
+                    headerHeight model + mainMenuHeight model
+
+                else
+                    mainMenuHeight model
+
+            --if model.device.class == Phone || model.device.class == Tablet then
+            --    mainMenuHeight model
+            --else if model.headerVisible then
+            --    headerHeight model + mainMenuHeight model
+            --else
+            --    mainMenuHeight model
         }
+        id
 
 
 main =
@@ -47,7 +62,7 @@ main =
 
 
 type alias Model =
-    { menuVisible : Bool
+    { headerVisible : Bool
     , scrollTop : Int
     , device : Device
     , width : Int
@@ -76,6 +91,7 @@ type Msg
     | WinResize Int Int
     | SmoothScroll String
     | SyncedUpdate Msg
+    | ToogleSideMenu
     | NoOp
 
 
@@ -102,7 +118,7 @@ type Link
 
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
-    ( { menuVisible = True
+    ( { headerVisible = True
       , scrollTop = flags.scrollTop
       , device = classifyDevice { width = flags.width, height = flags.height }
       , width = flags.width
@@ -155,6 +171,7 @@ update msg model =
                                 Nothing ->
                                     model.updateOnNextFrame
                         , url = url
+                        , sideMenuOpen = False
                       }
                     , Cmd.none
                     )
@@ -168,7 +185,7 @@ update msg model =
         Scrolled n ->
             ( { model
                 | scrollTop = n
-                , menuVisible = n == 0
+                , headerVisible = n == 0
               }
             , Cmd.none
             )
@@ -183,10 +200,13 @@ update msg model =
             )
 
         SmoothScroll id ->
-            ( model, Task.attempt (always NoOp) (scrollTo id) )
+            ( model, Task.attempt (always NoOp) (scrollTo model id) )
 
         SyncedUpdate msg_ ->
             update msg_ { model | updateOnNextFrame = Nothing }
+
+        ToogleSideMenu ->
+            ( { model | sideMenuOpen = not model.sideMenuOpen }, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
@@ -205,6 +225,11 @@ subscriptions model =
         ]
 
 
+
+-------------------------------------------------------------------------------
+-- View functions --
+
+
 view model =
     { title = "Basic template"
     , body =
@@ -218,7 +243,7 @@ view model =
                     ++ "x"
                     ++ String.fromInt model.height
             , clip
-            , inFront <| menuView model
+            , inFront <| mainMenuView model
             ]
             (column
                 [ width fill
@@ -228,26 +253,33 @@ view model =
                 ]
                 [ el
                     [ width fill
-                    , height (px <| menuHeaderHeight model + 45)
+                    , height (px <| headerHeight model + mainMenuHeight model)
                     , htmlAttribute <| HtmlAttr.id "appTop"
                     ]
                     Element.none
-                , Dict.get model.currentPosition.path content
+                , Dict.get
+                    model.currentPosition.path
+                    content
                     |> Maybe.withDefault Element.none
-                , text "footer"
+                , footerView model
                 ]
             )
         ]
     }
 
 
-menuHeaderHeight model =
+
+-------------------------------------------------------------------------------
+-- menu functions
+
+
+headerHeight model =
     case model.device.class of
         Phone ->
-            75
+            0
 
         Tablet ->
-            75
+            0
 
         Desktop ->
             125
@@ -256,35 +288,54 @@ menuHeaderHeight model =
             125
 
 
+mainMenuHeight model =
+    case model.device.class of
+        Phone ->
+            65
 
--------------------------------------------------------------------------------
--- View functions --
+        Tablet ->
+            65
+
+        Desktop ->
+            45
+
+        BigDesktop ->
+            45
 
 
-menuView model =
+menuItems =
+    [ Internal "/" "item 1" (Just "item1")
+    , Internal "/" "item 2" (Just "item2")
+    , Internal "/" "item 3" (Just "item3")
+    , Internal "/page1" "item 4" (Just "item4")
+    , Internal "/page1" "item 5" (Just "item5")
+    , Internal "/page2" "item 6" Nothing
+    , External "https://google.com" "google"
+    ]
+
+
+mainMenuView model =
     let
-        menuItems =
-            [ Internal "/" "item 1" (Just "item1")
-            , Internal "/" "item 2" (Just "item2")
-            , Internal "/" "item 3" (Just "item3")
-            , Internal "/page1" "item 4" (Just "item4")
-            , Internal "/page1" "item 5" (Just "item5")
-            , Internal "/page2" "item 6" Nothing
-            , External "https://google.com" "google"
-            ]
+        mainMenuBackgroundColor =
+            Element.rgba 0.4 0.5 0.7 0.4
 
         itemLenght =
             max 100 (model.width // List.length menuItems)
 
         itemView itemLink =
+            let
+                itemStyle =
+                    [ width (px itemLenght)
+                    , alignLeft
+                    , Background.color (Element.rgba 0.8 0.6 0.7 0.4)
+                    , padding 15
+                    , pointer
+                    ]
+            in
             case itemLink of
                 Internal path label mbAnchor ->
                     link
-                        [ width (px itemLenght)
-                        , Background.color (Element.rgba 0.8 0.6 0.7 0.4)
-                        , padding 15
-                        , pointer
-                        ]
+                        itemStyle
                         { url =
                             UrlBuilder.custom
                                 Relative
@@ -296,43 +347,100 @@ menuView model =
 
                 External externalUrl label ->
                     newTabLink
-                        [ width (px itemLenght)
-                        , Background.color (Element.rgba 0.8 0.6 0.7 0.4)
-                        , padding 15
-                        , pointer
-                        ]
+                        itemStyle
                         { url = externalUrl
                         , label = text label
                         }
 
-        phoneView =
-            column
-                []
-                []
+        sideMenuButton =
+            el
+                [ onClick ToogleSideMenu
+                , pointer
+                , paddingEach { sides | right = 15 }
+                ]
+                (viewIcon
+                    (if model.sideMenuOpen then
+                        Ionicon.Android.close
 
-        tabletView =
+                     else
+                        Ionicon.navicon
+                    )
+                    40
+                    grey
+                )
+
+        logoView size =
+            link
+                [ pointer ]
+                { url =
+                    UrlBuilder.custom
+                        Relative
+                        (String.split "/" "/")
+                        []
+                        (Just "appTop")
+                , label = viewIcon Ionicon.aperture size grey
+                }
+
+        mobileView =
             column
-                []
-                []
+                [ width fill ]
+                [ row
+                    [ width fill
+                    , Background.color mainMenuBackgroundColor
+                    ]
+                    [ el
+                        [ alignLeft
+                        ]
+                        (logoView 65)
+                    , el
+                        [ alignRight
+                        , centerY
+                        ]
+                        sideMenuButton
+                    ]
+                , column
+                    [ if model.sideMenuOpen then
+                        height (px <| model.height - headerHeight model + mainMenuHeight model)
+
+                      else
+                        noAttr
+                    , width <|
+                        if model.sideMenuOpen then
+                            if model.width > 400 then
+                                px 400
+
+                            else
+                                px model.width
+
+                        else
+                            px 0
+                    , htmlAttribute <| HtmlAttr.style "transition" "width 0.3s"
+                    , Background.color (col white)
+                    , clip
+                    , alignRight
+                    ]
+                    (List.map itemView menuItems)
+                ]
 
         desktopView =
             column
                 [ width fill ]
                 [ el
-                    [ Background.color (Element.rgba 0.4 0.5 0.7 0.4)
+                    [ Background.color mainMenuBackgroundColor
                     , width fill
                     , height <|
-                        if model.menuVisible then
-                            px <| menuHeaderHeight model
+                        if model.headerVisible then
+                            px <| headerHeight model
 
                         else
                             px 0
                     , htmlAttribute <| HtmlAttr.style "transition" "height 0.3s"
+                    , clip
                     ]
-                    Element.none
+                    (el [ centerX ] (logoView 120))
                 , row
                     [ width fill
-                    , spaceEvenly
+                    , height (px <| mainMenuHeight model)
                     , Background.color (Element.rgba 0.4 0.5 0.7 0.4)
                     ]
                     (List.map itemView menuItems)
@@ -340,10 +448,10 @@ menuView model =
     in
     case model.device.class of
         Phone ->
-            phoneView
+            mobileView
 
         Tablet ->
-            tabletView
+            mobileView
 
         Desktop ->
             desktopView
@@ -352,8 +460,40 @@ menuView model =
             desktopView
 
 
+
+-------------------------------------------------------------------------------
+--footerView
+
+
+footerView model =
+    column
+        [ width fill ]
+        [ link []
+            { url =
+                UrlBuilder.custom
+                    Relative
+                    (String.split "/" "/")
+                    []
+                    (Just "appTop")
+            , label = text "top"
+            }
+        ]
+
+
+
+-------------------------------------------------------------------------------
+
+
 noAttr =
     htmlAttribute <| HtmlAttr.class ""
+
+
+sides =
+    { top = 0, left = 0, right = 0, bottom = 0 }
+
+
+
+-------------------------------------------------------------------------------
 
 
 col : Color.Color -> Element.Color
@@ -362,6 +502,38 @@ col c =
         |> (\c_ ->
                 Element.rgba c_.red c_.green c_.blue c_.alpha
            )
+
+
+colA : Color.Color -> Float -> Element.Color
+colA c a =
+    Color.toRgba c
+        |> (\c_ ->
+                Element.rgba c_.red c_.green c_.blue a
+           )
+
+
+
+-------------------------------------------------------------------------------
+
+
+type alias RGBA =
+    { red : Float
+    , green : Float
+    , blue : Float
+    , alpha : Float
+    }
+
+
+type alias Icon msg =
+    Int -> RGBA -> Html.Html msg
+
+
+viewIcon : Icon msg -> Int -> Color.Color -> Element msg
+viewIcon icon size color =
+    el [ centerX, centerY ] <|
+        html <|
+            icon size
+                (Color.toRgba color)
 
 
 

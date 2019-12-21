@@ -10587,9 +10587,9 @@ var $author$project$Main$init = F3(
 				currentPosition: {anchor: $elm$core$Maybe$Nothing, path: '/home'},
 				device: $mdgriffith$elm_ui$Element$classifyDevice(
 					{height: flags.height, width: flags.width}),
+				headerVisible: true,
 				height: flags.height,
 				key: key,
-				menuVisible: true,
 				scrollTop: flags.scrollTop,
 				sideMenuOpen: false,
 				updateOnNextFrame: $elm$core$Maybe$Nothing,
@@ -11193,6 +11193,32 @@ var $elm_community$easing_functions$Ease$inQuint = function (time) {
 };
 var $elm_community$easing_functions$Ease$outQuint = $elm_community$easing_functions$Ease$flip($elm_community$easing_functions$Ease$inQuint);
 var $author$project$Scroll$Scroll$defaultConfig = {easing: $elm_community$easing_functions$Ease$outQuint, offset: 12, speed: 50, target: $elm$core$Maybe$Nothing};
+var $author$project$Main$headerHeight = function (model) {
+	var _v0 = model.device._class;
+	switch (_v0.$) {
+		case 'Phone':
+			return 0;
+		case 'Tablet':
+			return 0;
+		case 'Desktop':
+			return 125;
+		default:
+			return 125;
+	}
+};
+var $author$project$Main$mainMenuHeight = function (model) {
+	var _v0 = model.device._class;
+	switch (_v0.$) {
+		case 'Phone':
+			return 65;
+		case 'Tablet':
+			return 65;
+		case 'Desktop':
+			return 45;
+		default:
+			return 45;
+	}
+};
 var $elm$core$Basics$abs = function (n) {
 	return (n < 0) ? (-n) : n;
 };
@@ -11272,13 +11298,18 @@ var $author$project$Scroll$Scroll$scrollToWithOptions = F2(
 				getter,
 				$elm$browser$Browser$Dom$getElement(id)));
 	});
-var $author$project$Main$scrollTo = $author$project$Scroll$Scroll$scrollToWithOptions(
-	_Utils_update(
-		$author$project$Scroll$Scroll$defaultConfig,
-		{
-			offset: 50,
-			target: $elm$core$Maybe$Just('appContainer')
-		}));
+var $author$project$Main$scrollTo = F2(
+	function (model, id) {
+		return A2(
+			$author$project$Scroll$Scroll$scrollToWithOptions,
+			_Utils_update(
+				$author$project$Scroll$Scroll$defaultConfig,
+				{
+					offset: (id === 'appTop') ? ($author$project$Main$headerHeight(model) + $author$project$Main$mainMenuHeight(model)) : $author$project$Main$mainMenuHeight(model),
+					target: $elm$core$Maybe$Just('appContainer')
+				}),
+			id);
+	});
 var $elm$url$Url$Parser$slash = F2(
 	function (_v0, _v1) {
 		var parseBefore = _v0.a;
@@ -11395,6 +11426,7 @@ var $author$project$Main$update = F2(
 								model,
 								{
 									currentPosition: {anchor: mbAnchor, path: path},
+									sideMenuOpen: false,
 									updateOnNextFrame: function () {
 										if (mbAnchor.$ === 'Just') {
 											var anchor = mbAnchor.a;
@@ -11418,7 +11450,7 @@ var $author$project$Main$update = F2(
 					return _Utils_Tuple2(
 						_Utils_update(
 							model,
-							{menuVisible: !n, scrollTop: n}),
+							{headerVisible: !n, scrollTop: n}),
 						$elm$core$Platform$Cmd$none);
 				case 'WinResize':
 					var width = msg.a;
@@ -11440,7 +11472,7 @@ var $author$project$Main$update = F2(
 						A2(
 							$elm$core$Task$attempt,
 							$elm$core$Basics$always($author$project$Main$NoOp),
-							$author$project$Main$scrollTo(id)));
+							A2($author$project$Main$scrollTo, model, id)));
 				case 'SyncedUpdate':
 					var msg_ = msg.a;
 					var $temp$msg = msg_,
@@ -11450,6 +11482,12 @@ var $author$project$Main$update = F2(
 					msg = $temp$msg;
 					model = $temp$model;
 					continue update;
+				case 'ToogleSideMenu':
+					return _Utils_Tuple2(
+						_Utils_update(
+							model,
+							{sideMenuOpen: !model.sideMenuOpen}),
+						$elm$core$Platform$Cmd$none);
 				default:
 					return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 			}
@@ -16974,6 +17012,101 @@ var $author$project$Main$content = $elm$core$Dict$fromList(
 							]))
 					])))
 		]));
+var $elm$url$Url$Builder$Relative = {$: 'Relative'};
+var $elm$url$Url$Builder$rootToPrePath = function (root) {
+	switch (root.$) {
+		case 'Absolute':
+			return '/';
+		case 'Relative':
+			return '';
+		default:
+			var prePath = root.a;
+			return prePath + '/';
+	}
+};
+var $elm$url$Url$Builder$toQueryPair = function (_v0) {
+	var key = _v0.a;
+	var value = _v0.b;
+	return key + ('=' + value);
+};
+var $elm$url$Url$Builder$toQuery = function (parameters) {
+	if (!parameters.b) {
+		return '';
+	} else {
+		return '?' + A2(
+			$elm$core$String$join,
+			'&',
+			A2($elm$core$List$map, $elm$url$Url$Builder$toQueryPair, parameters));
+	}
+};
+var $elm$url$Url$Builder$custom = F4(
+	function (root, pathSegments, parameters, maybeFragment) {
+		var fragmentless = _Utils_ap(
+			$elm$url$Url$Builder$rootToPrePath(root),
+			_Utils_ap(
+				A2($elm$core$String$join, '/', pathSegments),
+				$elm$url$Url$Builder$toQuery(parameters)));
+		if (maybeFragment.$ === 'Nothing') {
+			return fragmentless;
+		} else {
+			var fragment = maybeFragment.a;
+			return fragmentless + ('#' + fragment);
+		}
+	});
+var $elm$html$Html$Attributes$rel = _VirtualDom_attribute('rel');
+var $mdgriffith$elm_ui$Element$link = F2(
+	function (attrs, _v0) {
+		var url = _v0.url;
+		var label = _v0.label;
+		return A4(
+			$mdgriffith$elm_ui$Internal$Model$element,
+			$mdgriffith$elm_ui$Internal$Model$asEl,
+			$mdgriffith$elm_ui$Internal$Model$NodeName('a'),
+			A2(
+				$elm$core$List$cons,
+				$mdgriffith$elm_ui$Internal$Model$Attr(
+					$elm$html$Html$Attributes$href(url)),
+				A2(
+					$elm$core$List$cons,
+					$mdgriffith$elm_ui$Internal$Model$Attr(
+						$elm$html$Html$Attributes$rel('noopener noreferrer')),
+					A2(
+						$elm$core$List$cons,
+						$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
+						A2(
+							$elm$core$List$cons,
+							$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
+							A2(
+								$elm$core$List$cons,
+								$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentCenterX + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.link)))),
+								attrs))))),
+			$mdgriffith$elm_ui$Internal$Model$Unkeyed(
+				_List_fromArray(
+					[label])));
+	});
+var $author$project$Main$footerView = function (model) {
+	return A2(
+		$mdgriffith$elm_ui$Element$column,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$mdgriffith$elm_ui$Element$link,
+				_List_Nil,
+				{
+					label: $mdgriffith$elm_ui$Element$text('top'),
+					url: A4(
+						$elm$url$Url$Builder$custom,
+						$elm$url$Url$Builder$Relative,
+						A2($elm$core$String$split, '/', '/'),
+						_List_Nil,
+						$elm$core$Maybe$Just('appTop'))
+				})
+			]));
+};
 var $mdgriffith$elm_ui$Element$Background$image = function (src) {
 	return $mdgriffith$elm_ui$Internal$Model$Attr(
 		A2($elm$virtual_dom$VirtualDom$style, 'background', 'url(\"' + (src + '\") center / cover no-repeat')));
@@ -17252,19 +17385,143 @@ var $mdgriffith$elm_ui$Element$layoutWith = F3(
 	});
 var $mdgriffith$elm_ui$Element$layout = $mdgriffith$elm_ui$Element$layoutWith(
 	{options: _List_Nil});
-var $author$project$Main$menuHeaderHeight = function (model) {
-	var _v0 = model.device._class;
-	switch (_v0.$) {
-		case 'Phone':
-			return 75;
-		case 'Tablet':
-			return 75;
-		case 'Desktop':
-			return 125;
-		default:
-			return 125;
-	}
+var $author$project$Main$ToogleSideMenu = {$: 'ToogleSideMenu'};
+var $mdgriffith$elm_ui$Internal$Model$AlignX = function (a) {
+	return {$: 'AlignX', a: a};
 };
+var $mdgriffith$elm_ui$Internal$Model$Left = {$: 'Left'};
+var $mdgriffith$elm_ui$Element$alignLeft = $mdgriffith$elm_ui$Internal$Model$AlignX($mdgriffith$elm_ui$Internal$Model$Left);
+var $mdgriffith$elm_ui$Internal$Model$Right = {$: 'Right'};
+var $mdgriffith$elm_ui$Element$alignRight = $mdgriffith$elm_ui$Internal$Model$AlignX($mdgriffith$elm_ui$Internal$Model$Right);
+var $elm$svg$Svg$Attributes$d = _VirtualDom_attribute('d');
+var $elm$core$Basics$clamp = F3(
+	function (low, high, number) {
+		return (_Utils_cmp(number, low) < 0) ? low : ((_Utils_cmp(number, high) > 0) ? high : number);
+	});
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$toAlphaString = function (value) {
+	return A2(
+		$elm$core$String$left,
+		5,
+		$elm$core$String$fromFloat(
+			A3($elm$core$Basics$clamp, 0, 1, value)));
+};
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$toColorString = function (value) {
+	return A2(
+		$elm$core$String$left,
+		5,
+		$elm$core$String$fromFloat(
+			A3($elm$core$Basics$clamp, 0, 255, 255 * value)));
+};
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$fill = function (_v0) {
+	var red = _v0.red;
+	var green = _v0.green;
+	var blue = _v0.blue;
+	var alpha = _v0.alpha;
+	var _v1 = ((0 <= alpha) && (alpha < 1)) ? _Utils_Tuple2(
+		'rgba',
+		_List_fromArray(
+			[
+				$j_panasiuk$elm_ionicons$Ionicon$Internal$toColorString(red),
+				$j_panasiuk$elm_ionicons$Ionicon$Internal$toColorString(green),
+				$j_panasiuk$elm_ionicons$Ionicon$Internal$toColorString(blue),
+				$j_panasiuk$elm_ionicons$Ionicon$Internal$toAlphaString(alpha)
+			])) : _Utils_Tuple2(
+		'rgb',
+		_List_fromArray(
+			[
+				$j_panasiuk$elm_ionicons$Ionicon$Internal$toColorString(red),
+				$j_panasiuk$elm_ionicons$Ionicon$Internal$toColorString(green),
+				$j_panasiuk$elm_ionicons$Ionicon$Internal$toColorString(blue)
+			]));
+	var colorSpace = _v1.a;
+	var values = _v1.b;
+	return colorSpace + ('(' + (A2($elm$core$String$join, ',', values) + ')'));
+};
+var $elm$svg$Svg$Attributes$fill = _VirtualDom_attribute('fill');
+var $elm$svg$Svg$trustedNode = _VirtualDom_nodeNS('http://www.w3.org/2000/svg');
+var $elm$svg$Svg$g = $elm$svg$Svg$trustedNode('g');
+var $elm$svg$Svg$path = $elm$svg$Svg$trustedNode('path');
+var $elm$svg$Svg$Attributes$enableBackground = _VirtualDom_attribute('enable-background');
+var $elm$svg$Svg$Attributes$height = _VirtualDom_attribute('height');
+var $elm$svg$Svg$svg = $elm$svg$Svg$trustedNode('svg');
+var $elm$svg$Svg$Attributes$version = _VirtualDom_attribute('version');
+var $elm$svg$Svg$Attributes$viewBox = _VirtualDom_attribute('viewBox');
+var $elm$svg$Svg$Attributes$width = _VirtualDom_attribute('width');
+var $elm$svg$Svg$Attributes$x = _VirtualDom_attribute('x');
+var $elm$svg$Svg$Attributes$y = _VirtualDom_attribute('y');
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$svg = function (size) {
+	return $elm$svg$Svg$svg(
+		_List_fromArray(
+			[
+				$elm$svg$Svg$Attributes$version('1.1'),
+				$elm$svg$Svg$Attributes$x('0px'),
+				$elm$svg$Svg$Attributes$y('0px'),
+				$elm$svg$Svg$Attributes$width(
+				$elm$core$String$fromInt(size)),
+				$elm$svg$Svg$Attributes$height(
+				$elm$core$String$fromInt(size)),
+				$elm$svg$Svg$Attributes$viewBox('0 0 512 512'),
+				$elm$svg$Svg$Attributes$enableBackground('new 0 0 512 512')
+			]));
+};
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$ps = F3(
+	function (ds, size, color) {
+		return A2(
+			$j_panasiuk$elm_ionicons$Ionicon$Internal$svg,
+			size,
+			_List_fromArray(
+				[
+					A2(
+					$elm$svg$Svg$g,
+					_List_Nil,
+					A2(
+						$elm$core$List$map,
+						function (d) {
+							return A2(
+								$elm$svg$Svg$path,
+								_List_fromArray(
+									[
+										$elm$svg$Svg$Attributes$d(d),
+										$elm$svg$Svg$Attributes$fill(
+										$j_panasiuk$elm_ionicons$Ionicon$Internal$fill(color))
+									]),
+								_List_Nil);
+						},
+						ds))
+				]));
+	});
+var $j_panasiuk$elm_ionicons$Ionicon$aperture = $j_panasiuk$elm_ionicons$Ionicon$Internal$ps(
+	_List_fromArray(
+		['M256,32C132.288,32,32,132.288,32,256s100.288,224,224,224s224-100.288,224-224S379.712,32,256,32zM391.765,391.765C355.5,428.028,307.285,448,256,448s-99.5-19.972-135.765-56.235C83.972,355.5,64,307.285,64,256s19.972-99.5,56.235-135.765C156.5,83.972,204.715,64,256,64s99.5,19.972,135.765,56.235C428.028,156.5,448,204.715,448,256S428.028,355.5,391.765,391.765z', 'M200.043,106.067c-40.631,15.171-73.434,46.382-90.717,85.933H256L200.043,106.067z', 'M412.797,288c2.099-10.34,3.203-21.041,3.203-32c0-36.624-12.314-70.367-33.016-97.334L311,288H412.797z', 'M359.973,134.395C332.007,110.461,295.694,96,256,96c-7.966,0-15.794,0.591-23.448,1.715L310.852,224L359.973,134.395z', 'M99.204,224C97.104,234.34,96,245.041,96,256c0,36.639,12.324,70.394,33.041,97.366L201,224H99.204z', 'M311.959,405.932c40.631-15.171,73.433-46.382,90.715-85.932H256L311.959,405.932z', 'M152.046,377.621C180.009,401.545,216.314,416,256,416c7.969,0,15.799-0.592,23.456-1.716L201.164,288L152.046,377.621z']));
+var $mdgriffith$elm_ui$Internal$Model$CenterX = {$: 'CenterX'};
+var $mdgriffith$elm_ui$Element$centerX = $mdgriffith$elm_ui$Internal$Model$AlignX($mdgriffith$elm_ui$Internal$Model$CenterX);
+var $mdgriffith$elm_ui$Internal$Model$AlignY = function (a) {
+	return {$: 'AlignY', a: a};
+};
+var $mdgriffith$elm_ui$Internal$Model$CenterY = {$: 'CenterY'};
+var $mdgriffith$elm_ui$Element$centerY = $mdgriffith$elm_ui$Internal$Model$AlignY($mdgriffith$elm_ui$Internal$Model$CenterY);
+var $elm$svg$Svg$Attributes$points = _VirtualDom_attribute('points');
+var $elm$svg$Svg$polygon = $elm$svg$Svg$trustedNode('polygon');
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$pg = F3(
+	function (points, size, color) {
+		return A2(
+			$j_panasiuk$elm_ionicons$Ionicon$Internal$svg,
+			size,
+			_List_fromArray(
+				[
+					A2(
+					$elm$svg$Svg$polygon,
+					_List_fromArray(
+						[
+							$elm$svg$Svg$Attributes$points(points),
+							$elm$svg$Svg$Attributes$fill(
+							$j_panasiuk$elm_ionicons$Ionicon$Internal$fill(color))
+						]),
+					_List_Nil)
+				]));
+	});
+var $j_panasiuk$elm_ionicons$Ionicon$Android$close = $j_panasiuk$elm_ionicons$Ionicon$Internal$pg('405,136.798 375.202,107 256,226.202 136.798,107 107,136.798 226.202,256 107,375.202 136.798,405 256,285.798 375.202,405 405,375.202 285.798,256');
+var $avh4$elm_color$Color$grey = A4($avh4$elm_color$Color$RgbaSpace, 211 / 255, 215 / 255, 207 / 255, 1.0);
 var $author$project$Main$External = F2(
 	function (a, b) {
 		return {$: 'External', a: a, b: b};
@@ -17273,78 +17530,77 @@ var $author$project$Main$Internal = F3(
 	function (a, b, c) {
 		return {$: 'Internal', a: a, b: b, c: c};
 	});
-var $elm$url$Url$Builder$Relative = {$: 'Relative'};
-var $elm$url$Url$Builder$rootToPrePath = function (root) {
-	switch (root.$) {
-		case 'Absolute':
-			return '/';
-		case 'Relative':
-			return '';
-		default:
-			var prePath = root.a;
-			return prePath + '/';
-	}
-};
-var $elm$url$Url$Builder$toQueryPair = function (_v0) {
-	var key = _v0.a;
-	var value = _v0.b;
-	return key + ('=' + value);
-};
-var $elm$url$Url$Builder$toQuery = function (parameters) {
-	if (!parameters.b) {
-		return '';
-	} else {
-		return '?' + A2(
-			$elm$core$String$join,
-			'&',
-			A2($elm$core$List$map, $elm$url$Url$Builder$toQueryPair, parameters));
-	}
-};
-var $elm$url$Url$Builder$custom = F4(
-	function (root, pathSegments, parameters, maybeFragment) {
-		var fragmentless = _Utils_ap(
-			$elm$url$Url$Builder$rootToPrePath(root),
-			_Utils_ap(
-				A2($elm$core$String$join, '/', pathSegments),
-				$elm$url$Url$Builder$toQuery(parameters)));
-		if (maybeFragment.$ === 'Nothing') {
-			return fragmentless;
-		} else {
-			var fragment = maybeFragment.a;
-			return fragmentless + ('#' + fragment);
-		}
-	});
-var $elm$html$Html$Attributes$rel = _VirtualDom_attribute('rel');
-var $mdgriffith$elm_ui$Element$link = F2(
-	function (attrs, _v0) {
-		var url = _v0.url;
-		var label = _v0.label;
-		return A4(
-			$mdgriffith$elm_ui$Internal$Model$element,
-			$mdgriffith$elm_ui$Internal$Model$asEl,
-			$mdgriffith$elm_ui$Internal$Model$NodeName('a'),
-			A2(
-				$elm$core$List$cons,
-				$mdgriffith$elm_ui$Internal$Model$Attr(
-					$elm$html$Html$Attributes$href(url)),
-				A2(
-					$elm$core$List$cons,
-					$mdgriffith$elm_ui$Internal$Model$Attr(
-						$elm$html$Html$Attributes$rel('noopener noreferrer')),
+var $author$project$Main$menuItems = _List_fromArray(
+	[
+		A3(
+		$author$project$Main$Internal,
+		'/',
+		'item 1',
+		$elm$core$Maybe$Just('item1')),
+		A3(
+		$author$project$Main$Internal,
+		'/',
+		'item 2',
+		$elm$core$Maybe$Just('item2')),
+		A3(
+		$author$project$Main$Internal,
+		'/',
+		'item 3',
+		$elm$core$Maybe$Just('item3')),
+		A3(
+		$author$project$Main$Internal,
+		'/page1',
+		'item 4',
+		$elm$core$Maybe$Just('item4')),
+		A3(
+		$author$project$Main$Internal,
+		'/page1',
+		'item 5',
+		$elm$core$Maybe$Just('item5')),
+		A3($author$project$Main$Internal, '/page2', 'item 6', $elm$core$Maybe$Nothing),
+		A2($author$project$Main$External, 'https://google.com', 'google')
+	]);
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$g = F3(
+	function (elements, size, color) {
+		return A2(
+			$j_panasiuk$elm_ionicons$Ionicon$Internal$svg,
+			size,
+			_List_fromArray(
+				[
 					A2(
-						$elm$core$List$cons,
-						$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
-						A2(
-							$elm$core$List$cons,
-							$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
-							A2(
-								$elm$core$List$cons,
-								$mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.contentCenterX + (' ' + ($mdgriffith$elm_ui$Internal$Style$classes.contentCenterY + (' ' + $mdgriffith$elm_ui$Internal$Style$classes.link)))),
-								attrs))))),
-			$mdgriffith$elm_ui$Internal$Model$Unkeyed(
-				_List_fromArray(
-					[label])));
+					$elm$svg$Svg$g,
+					_List_Nil,
+					A2(
+						$elm$core$List$map,
+						function (el) {
+							return el(color);
+						},
+						elements))
+				]));
 	});
+var $elm$svg$Svg$rect = $elm$svg$Svg$trustedNode('rect');
+var $j_panasiuk$elm_ionicons$Ionicon$Internal$r4 = F5(
+	function (x, y, width, height, color) {
+		return A2(
+			$elm$svg$Svg$rect,
+			_List_fromArray(
+				[
+					$elm$svg$Svg$Attributes$x(x),
+					$elm$svg$Svg$Attributes$y(y),
+					$elm$svg$Svg$Attributes$width(width),
+					$elm$svg$Svg$Attributes$height(height),
+					$elm$svg$Svg$Attributes$fill(
+					$j_panasiuk$elm_ionicons$Ionicon$Internal$fill(color))
+				]),
+			_List_Nil);
+	});
+var $j_panasiuk$elm_ionicons$Ionicon$navicon = $j_panasiuk$elm_ionicons$Ionicon$Internal$g(
+	_List_fromArray(
+		[
+			A4($j_panasiuk$elm_ionicons$Ionicon$Internal$r4, '96', '241', '320', '32'),
+			A4($j_panasiuk$elm_ionicons$Ionicon$Internal$r4, '96', '145', '320', '32'),
+			A4($j_panasiuk$elm_ionicons$Ionicon$Internal$r4, '96', '337', '320', '32')
+		]));
 var $elm$html$Html$Attributes$target = $elm$html$Html$Attributes$stringProperty('target');
 var $mdgriffith$elm_ui$Element$newTabLink = F2(
 	function (attrs, _v0) {
@@ -17380,6 +17636,38 @@ var $mdgriffith$elm_ui$Element$newTabLink = F2(
 				_List_fromArray(
 					[label])));
 	});
+var $author$project$Main$noAttr = $mdgriffith$elm_ui$Element$htmlAttribute(
+	$elm$html$Html$Attributes$class(''));
+var $mdgriffith$elm_ui$Element$Events$onClick = A2($elm$core$Basics$composeL, $mdgriffith$elm_ui$Internal$Model$Attr, $elm$html$Html$Events$onClick);
+var $mdgriffith$elm_ui$Internal$Model$paddingName = F4(
+	function (top, right, bottom, left) {
+		return 'pad-' + ($elm$core$String$fromInt(top) + ('-' + ($elm$core$String$fromInt(right) + ('-' + ($elm$core$String$fromInt(bottom) + ('-' + $elm$core$String$fromInt(left)))))));
+	});
+var $mdgriffith$elm_ui$Element$paddingEach = function (_v0) {
+	var top = _v0.top;
+	var right = _v0.right;
+	var bottom = _v0.bottom;
+	var left = _v0.left;
+	return (_Utils_eq(top, right) && (_Utils_eq(top, bottom) && _Utils_eq(top, left))) ? A2(
+		$mdgriffith$elm_ui$Internal$Model$StyleClass,
+		$mdgriffith$elm_ui$Internal$Flag$padding,
+		A5(
+			$mdgriffith$elm_ui$Internal$Model$PaddingStyle,
+			'p-' + $elm$core$String$fromInt(top),
+			top,
+			top,
+			top,
+			top)) : A2(
+		$mdgriffith$elm_ui$Internal$Model$StyleClass,
+		$mdgriffith$elm_ui$Internal$Flag$padding,
+		A5(
+			$mdgriffith$elm_ui$Internal$Model$PaddingStyle,
+			A4($mdgriffith$elm_ui$Internal$Model$paddingName, top, right, bottom, left),
+			top,
+			right,
+			bottom,
+			left));
+};
 var $mdgriffith$elm_ui$Internal$Flag$cursor = $mdgriffith$elm_ui$Internal$Flag$flag(21);
 var $mdgriffith$elm_ui$Element$pointer = A2($mdgriffith$elm_ui$Internal$Model$Class, $mdgriffith$elm_ui$Internal$Flag$cursor, $mdgriffith$elm_ui$Internal$Style$classes.cursorPointer);
 var $mdgriffith$elm_ui$Internal$Model$AsRow = {$: 'AsRow'};
@@ -17402,60 +17690,76 @@ var $mdgriffith$elm_ui$Element$row = F2(
 						attrs))),
 			$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
 	});
-var $mdgriffith$elm_ui$Element$spaceEvenly = A2($mdgriffith$elm_ui$Internal$Model$Class, $mdgriffith$elm_ui$Internal$Flag$spacing, $mdgriffith$elm_ui$Internal$Style$classes.spaceEvenly);
-var $author$project$Main$menuView = function (model) {
-	var tabletView = A2($mdgriffith$elm_ui$Element$column, _List_Nil, _List_Nil);
-	var phoneView = A2($mdgriffith$elm_ui$Element$column, _List_Nil, _List_Nil);
-	var menuItems = _List_fromArray(
-		[
-			A3(
-			$author$project$Main$Internal,
-			'/',
-			'item 1',
-			$elm$core$Maybe$Just('item1')),
-			A3(
-			$author$project$Main$Internal,
-			'/',
-			'item 2',
-			$elm$core$Maybe$Just('item2')),
-			A3(
-			$author$project$Main$Internal,
-			'/',
-			'item 3',
-			$elm$core$Maybe$Just('item3')),
-			A3(
-			$author$project$Main$Internal,
-			'/page1',
-			'item 4',
-			$elm$core$Maybe$Just('item4')),
-			A3(
-			$author$project$Main$Internal,
-			'/page1',
-			'item 5',
-			$elm$core$Maybe$Just('item5')),
-			A3($author$project$Main$Internal, '/page2', 'item 6', $elm$core$Maybe$Nothing),
-			A2($author$project$Main$External, 'https://google.com', 'google')
-		]);
+var $author$project$Main$sides = {bottom: 0, left: 0, right: 0, top: 0};
+var $mdgriffith$elm_ui$Internal$Model$unstyled = A2($elm$core$Basics$composeL, $mdgriffith$elm_ui$Internal$Model$Unstyled, $elm$core$Basics$always);
+var $mdgriffith$elm_ui$Element$html = $mdgriffith$elm_ui$Internal$Model$unstyled;
+var $author$project$Main$viewIcon = F3(
+	function (icon, size, color) {
+		return A2(
+			$mdgriffith$elm_ui$Element$el,
+			_List_fromArray(
+				[$mdgriffith$elm_ui$Element$centerX, $mdgriffith$elm_ui$Element$centerY]),
+			$mdgriffith$elm_ui$Element$html(
+				A2(
+					icon,
+					size,
+					$avh4$elm_color$Color$toRgba(color))));
+	});
+var $author$project$Main$mainMenuView = function (model) {
+	var sideMenuButton = A2(
+		$mdgriffith$elm_ui$Element$el,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$Events$onClick($author$project$Main$ToogleSideMenu),
+				$mdgriffith$elm_ui$Element$pointer,
+				$mdgriffith$elm_ui$Element$paddingEach(
+				_Utils_update(
+					$author$project$Main$sides,
+					{right: 15}))
+			]),
+		A3(
+			$author$project$Main$viewIcon,
+			model.sideMenuOpen ? $j_panasiuk$elm_ionicons$Ionicon$Android$close : $j_panasiuk$elm_ionicons$Ionicon$navicon,
+			40,
+			$avh4$elm_color$Color$grey));
+	var mainMenuBackgroundColor = A4($mdgriffith$elm_ui$Element$rgba, 0.4, 0.5, 0.7, 0.4);
+	var logoView = function (size) {
+		return A2(
+			$mdgriffith$elm_ui$Element$link,
+			_List_fromArray(
+				[$mdgriffith$elm_ui$Element$pointer]),
+			{
+				label: A3($author$project$Main$viewIcon, $j_panasiuk$elm_ionicons$Ionicon$aperture, size, $avh4$elm_color$Color$grey),
+				url: A4(
+					$elm$url$Url$Builder$custom,
+					$elm$url$Url$Builder$Relative,
+					A2($elm$core$String$split, '/', '/'),
+					_List_Nil,
+					$elm$core$Maybe$Just('appTop'))
+			});
+	};
 	var itemLenght = A2(
 		$elm$core$Basics$max,
 		100,
-		(model.width / $elm$core$List$length(menuItems)) | 0);
+		(model.width / $elm$core$List$length($author$project$Main$menuItems)) | 0);
 	var itemView = function (itemLink) {
+		var itemStyle = _List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width(
+				$mdgriffith$elm_ui$Element$px(itemLenght)),
+				$mdgriffith$elm_ui$Element$alignLeft,
+				$mdgriffith$elm_ui$Element$Background$color(
+				A4($mdgriffith$elm_ui$Element$rgba, 0.8, 0.6, 0.7, 0.4)),
+				$mdgriffith$elm_ui$Element$padding(15),
+				$mdgriffith$elm_ui$Element$pointer
+			]);
 		if (itemLink.$ === 'Internal') {
 			var path = itemLink.a;
 			var label = itemLink.b;
 			var mbAnchor = itemLink.c;
 			return A2(
 				$mdgriffith$elm_ui$Element$link,
-				_List_fromArray(
-					[
-						$mdgriffith$elm_ui$Element$width(
-						$mdgriffith$elm_ui$Element$px(itemLenght)),
-						$mdgriffith$elm_ui$Element$Background$color(
-						A4($mdgriffith$elm_ui$Element$rgba, 0.8, 0.6, 0.7, 0.4)),
-						$mdgriffith$elm_ui$Element$padding(15),
-						$mdgriffith$elm_ui$Element$pointer
-					]),
+				itemStyle,
 				{
 					label: $mdgriffith$elm_ui$Element$text(label),
 					url: A4(
@@ -17470,21 +17774,59 @@ var $author$project$Main$menuView = function (model) {
 			var label = itemLink.b;
 			return A2(
 				$mdgriffith$elm_ui$Element$newTabLink,
-				_List_fromArray(
-					[
-						$mdgriffith$elm_ui$Element$width(
-						$mdgriffith$elm_ui$Element$px(itemLenght)),
-						$mdgriffith$elm_ui$Element$Background$color(
-						A4($mdgriffith$elm_ui$Element$rgba, 0.8, 0.6, 0.7, 0.4)),
-						$mdgriffith$elm_ui$Element$padding(15),
-						$mdgriffith$elm_ui$Element$pointer
-					]),
+				itemStyle,
 				{
 					label: $mdgriffith$elm_ui$Element$text(label),
 					url: externalUrl
 				});
 		}
 	};
+	var mobileView = A2(
+		$mdgriffith$elm_ui$Element$column,
+		_List_fromArray(
+			[
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill)
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$mdgriffith$elm_ui$Element$row,
+				_List_fromArray(
+					[
+						$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
+						$mdgriffith$elm_ui$Element$Background$color(mainMenuBackgroundColor)
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$mdgriffith$elm_ui$Element$el,
+						_List_fromArray(
+							[$mdgriffith$elm_ui$Element$alignLeft]),
+						logoView(65)),
+						A2(
+						$mdgriffith$elm_ui$Element$el,
+						_List_fromArray(
+							[$mdgriffith$elm_ui$Element$alignRight, $mdgriffith$elm_ui$Element$centerY]),
+						sideMenuButton)
+					])),
+				A2(
+				$mdgriffith$elm_ui$Element$column,
+				_List_fromArray(
+					[
+						model.sideMenuOpen ? $mdgriffith$elm_ui$Element$height(
+						$mdgriffith$elm_ui$Element$px(
+							(model.height - $author$project$Main$headerHeight(model)) + $author$project$Main$mainMenuHeight(model))) : $author$project$Main$noAttr,
+						$mdgriffith$elm_ui$Element$width(
+						model.sideMenuOpen ? ((model.width > 400) ? $mdgriffith$elm_ui$Element$px(400) : $mdgriffith$elm_ui$Element$px(model.width)) : $mdgriffith$elm_ui$Element$px(0)),
+						$mdgriffith$elm_ui$Element$htmlAttribute(
+						A2($elm$html$Html$Attributes$style, 'transition', 'width 0.3s')),
+						$mdgriffith$elm_ui$Element$Background$color(
+						$author$project$Main$col($avh4$elm_color$Color$white)),
+						$mdgriffith$elm_ui$Element$clip,
+						$mdgriffith$elm_ui$Element$alignRight
+					]),
+				A2($elm$core$List$map, itemView, $author$project$Main$menuItems))
+			]));
 	var desktopView = A2(
 		$mdgriffith$elm_ui$Element$column,
 		_List_fromArray(
@@ -17497,33 +17839,39 @@ var $author$project$Main$menuView = function (model) {
 				$mdgriffith$elm_ui$Element$el,
 				_List_fromArray(
 					[
-						$mdgriffith$elm_ui$Element$Background$color(
-						A4($mdgriffith$elm_ui$Element$rgba, 0.4, 0.5, 0.7, 0.4)),
+						$mdgriffith$elm_ui$Element$Background$color(mainMenuBackgroundColor),
 						$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
 						$mdgriffith$elm_ui$Element$height(
-						model.menuVisible ? $mdgriffith$elm_ui$Element$px(
-							$author$project$Main$menuHeaderHeight(model)) : $mdgriffith$elm_ui$Element$px(0)),
+						model.headerVisible ? $mdgriffith$elm_ui$Element$px(
+							$author$project$Main$headerHeight(model)) : $mdgriffith$elm_ui$Element$px(0)),
 						$mdgriffith$elm_ui$Element$htmlAttribute(
-						A2($elm$html$Html$Attributes$style, 'transition', 'height 0.3s'))
+						A2($elm$html$Html$Attributes$style, 'transition', 'height 0.3s')),
+						$mdgriffith$elm_ui$Element$clip
 					]),
-				$mdgriffith$elm_ui$Element$none),
+				A2(
+					$mdgriffith$elm_ui$Element$el,
+					_List_fromArray(
+						[$mdgriffith$elm_ui$Element$centerX]),
+					logoView(120))),
 				A2(
 				$mdgriffith$elm_ui$Element$row,
 				_List_fromArray(
 					[
 						$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
-						$mdgriffith$elm_ui$Element$spaceEvenly,
+						$mdgriffith$elm_ui$Element$height(
+						$mdgriffith$elm_ui$Element$px(
+							$author$project$Main$mainMenuHeight(model))),
 						$mdgriffith$elm_ui$Element$Background$color(
 						A4($mdgriffith$elm_ui$Element$rgba, 0.4, 0.5, 0.7, 0.4))
 					]),
-				A2($elm$core$List$map, itemView, menuItems))
+				A2($elm$core$List$map, itemView, $author$project$Main$menuItems))
 			]));
 	var _v0 = model.device._class;
 	switch (_v0.$) {
 		case 'Phone':
-			return phoneView;
+			return mobileView;
 		case 'Tablet':
-			return tabletView;
+			return mobileView;
 		case 'Desktop':
 			return desktopView;
 		default:
@@ -17553,7 +17901,7 @@ var $author$project$Main$view = function (model) {
 						'https://via.placeholder.com/' + ($elm$core$String$fromInt(model.width) + ('x' + $elm$core$String$fromInt(model.height)))),
 						$mdgriffith$elm_ui$Element$clip,
 						$mdgriffith$elm_ui$Element$inFront(
-						$author$project$Main$menuView(model))
+						$author$project$Main$mainMenuView(model))
 					]),
 				A2(
 					$mdgriffith$elm_ui$Element$column,
@@ -17575,7 +17923,7 @@ var $author$project$Main$view = function (model) {
 									$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$fill),
 									$mdgriffith$elm_ui$Element$height(
 									$mdgriffith$elm_ui$Element$px(
-										$author$project$Main$menuHeaderHeight(model) + 45)),
+										$author$project$Main$headerHeight(model) + $author$project$Main$mainMenuHeight(model))),
 									$mdgriffith$elm_ui$Element$htmlAttribute(
 									$elm$html$Html$Attributes$id('appTop'))
 								]),
@@ -17584,7 +17932,7 @@ var $author$project$Main$view = function (model) {
 							$elm$core$Maybe$withDefault,
 							$mdgriffith$elm_ui$Element$none,
 							A2($elm$core$Dict$get, model.currentPosition.path, $author$project$Main$content)),
-							$mdgriffith$elm_ui$Element$text('footer')
+							$author$project$Main$footerView(model)
 						])))
 			]),
 		title: 'Basic template'
@@ -17614,4 +17962,4 @@ _Platform_export({'Main':{'init':$author$project$Main$main(
 				},
 				A2($elm$json$Json$Decode$field, 'scrollTop', $elm$json$Json$Decode$int));
 		},
-		A2($elm$json$Json$Decode$field, 'width', $elm$json$Json$Decode$int)))({"versions":{"elm":"0.19.1"},"types":{"message":"Main.Msg","aliases":{"Url.Url":{"args":[],"type":"{ protocol : Url.Protocol, host : String.String, port_ : Maybe.Maybe Basics.Int, path : String.String, query : Maybe.Maybe String.String, fragment : Maybe.Maybe String.String }"}},"unions":{"Main.Msg":{"args":[],"tags":{"ChangeUrl":["Url.Url"],"ClickedLink":["Browser.UrlRequest"],"Tick":["Time.Posix"],"Scrolled":["Basics.Int"],"WinResize":["Basics.Int","Basics.Int"],"SmoothScroll":["String.String"],"SyncedUpdate":["Main.Msg"],"NoOp":[]}},"Basics.Int":{"args":[],"tags":{"Int":[]}},"Maybe.Maybe":{"args":["a"],"tags":{"Just":["a"],"Nothing":[]}},"Time.Posix":{"args":[],"tags":{"Posix":["Basics.Int"]}},"Url.Protocol":{"args":[],"tags":{"Http":[],"Https":[]}},"String.String":{"args":[],"tags":{"String":[]}},"Browser.UrlRequest":{"args":[],"tags":{"Internal":["Url.Url"],"External":["String.String"]}}}}})}});}(this));
+		A2($elm$json$Json$Decode$field, 'width', $elm$json$Json$Decode$int)))({"versions":{"elm":"0.19.1"},"types":{"message":"Main.Msg","aliases":{"Url.Url":{"args":[],"type":"{ protocol : Url.Protocol, host : String.String, port_ : Maybe.Maybe Basics.Int, path : String.String, query : Maybe.Maybe String.String, fragment : Maybe.Maybe String.String }"}},"unions":{"Main.Msg":{"args":[],"tags":{"ChangeUrl":["Url.Url"],"ClickedLink":["Browser.UrlRequest"],"Tick":["Time.Posix"],"Scrolled":["Basics.Int"],"WinResize":["Basics.Int","Basics.Int"],"SmoothScroll":["String.String"],"SyncedUpdate":["Main.Msg"],"ToogleSideMenu":[],"NoOp":[]}},"Basics.Int":{"args":[],"tags":{"Int":[]}},"Maybe.Maybe":{"args":["a"],"tags":{"Just":["a"],"Nothing":[]}},"Time.Posix":{"args":[],"tags":{"Posix":["Basics.Int"]}},"Url.Protocol":{"args":[],"tags":{"Http":[],"Https":[]}},"String.String":{"args":[],"tags":{"String":[]}},"Browser.UrlRequest":{"args":[],"tags":{"Internal":["Url.Url"],"External":["String.String"]}}}}})}});}(this));
