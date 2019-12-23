@@ -41,25 +41,13 @@ subscriptions model =
         [ scroll Scrolled
         , onResize WinResize
         , onVisibilityChange VisibilityChange
-        , if
-            (model.currentAnimation == Nothing)
-                && (not <|
-                        Dict.Extra.any
-                            (\k (CustomAnim anim) -> isRunning model.clock anim.animation)
-                            model.customAnimations
-                   )
-          then
+        , if model.currentAnimation == Nothing then
             Sub.none
 
           else
             onAnimationFrame Tick
         , if model.animate && (model.visibility == Visible) then
-            Time.every 6000 (Animate "slideShow")
-            --Dict.map (\_ (CustomAnim a) -> a.recurring) model.customAnimations
-            --    |> Dict.Extra.filterMap (\_ -> identity)
-            --    |> Dict.map (\k t -> Time.every t (Animate k))
-            --    |> Dict.values
-            --    |> Sub.batch
+            Time.every 6000 Animate
 
           else
             Sub.none
@@ -93,7 +81,6 @@ type alias Model =
     , visibility : Visibility
     , animate : Bool
     , currentAnimation : Maybe Animation
-    , customAnimations : Dict String CustomAnim
     , clock : Float
     , key : Nav.Key
     , url : Url.Url
@@ -103,17 +90,6 @@ type alias Model =
     , loaded : Set String
     , images : BiStream (List Image)
     }
-
-
-type CustomAnim
-    = CustomAnim
-        { name : String
-        , animation : Animation
-        , reversed : Bool
-        , recurring : Maybe Float
-        , startUpdate : Maybe (Model -> ( Model, Cmd Msg ))
-        , endUpdate : Maybe (Model -> ( Model, Cmd Msg ))
-        }
 
 
 type alias Image =
@@ -134,7 +110,7 @@ type alias Flags =
 type Msg
     = ChangeUrl Url.Url
     | ClickedLink UrlRequest
-    | Animate String Posix
+    | Animate Posix
     | Tick Posix
     | Scrolled Int
     | WinResize Int Int
@@ -182,25 +158,6 @@ init flags url key =
                 imgs
                 |> (\xs -> biStream xs (Image "" -1))
                 |> chunkBiStream 3
-
-        animations =
-            Dict.fromList
-                [ ( "slideShow"
-                  , CustomAnim
-                        { name = "slideShow"
-                        , animation =
-                            animation (toFloat flags.currentTime)
-                                |> from 1
-                                |> to 0
-                                |> duration 1500
-                                |> ease Ease.linear
-                        , reversed = False
-                        , recurring = Just 6000
-                        , startUpdate = Nothing
-                        , endUpdate = Nothing
-                        }
-                  )
-                ]
     in
     ( { headerVisible = True
       , scrollTop = flags.scrollTop
@@ -211,7 +168,6 @@ init flags url key =
       , visibility = Visible
       , animate = True
       , currentAnimation = Nothing
-      , customAnimations = animations
       , clock = toFloat flags.currentTime
       , key = key
       , url = url
@@ -271,70 +227,36 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        Animate name time ->
-            case Dict.get name model.customAnimations of
-                Just (CustomAnim anim) ->
-                    let
-                        newClock =
-                            toFloat <| posixToMillis time
+        Animate time ->
+            let
+                newClock =
+                    toFloat <| posixToMillis time
 
-                        newAnimation =
-                            let
-                                f =
-                                    getFrom anim.animation
+                newAnim =
+                    case model.currentAnimation of
+                        Nothing ->
+                            Just
+                                (animation newClock
+                                    |> from 1
+                                    |> to 0
+                                    |> duration 1500
+                                    |> ease Ease.linear
+                                )
 
-                                t =
-                                    getTo anim.animation
-
-                                d =
-                                    getDuration anim.animation
-
-                                e =
-                                    getEase anim.animation
-                            in
-                            animation newClock
-                                |> from f
-                                |> to t
-                                |> duration d
-                                |> ease e
-
-                        newAnim =
-                            case model.currentAnimation of
-                                Nothing ->
-                                    Just
-                                        (animation newClock
-                                            |> from 1
-                                            |> to 0
-                                            |> duration 1500
-                                            |> ease Ease.linear
-                                        )
-
-                                _ ->
-                                    Nothing
-                    in
-                    ( { model
-                        | currentAnimation = newAnim
-                        , customAnimations =
-                            Dict.insert name
-                                (CustomAnim { anim | animation = newAnimation })
-                                model.customAnimations
-                      }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( model, Cmd.none )
+                        _ ->
+                            Nothing
+            in
+            ( { model
+                | currentAnimation = newAnim
+              }
+            , Cmd.none
+            )
 
         Tick time ->
             let
                 newClock =
                     toFloat <| posixToMillis time
 
-                --(newAnimations, updates) =
-                --    Dict.foldr
-                --        (\k (CustomAnim anim) (anims, upd) ->
-                --            if isDone newClock anim then
-                --                )
                 ( newAnim, newImages ) =
                     case model.currentAnimation of
                         Just anim ->
@@ -383,7 +305,12 @@ update msg model =
             update msg_ { model | updateOnNextFrame = Nothing }
 
         ToogleSideMenu ->
-            ( { model | sideMenuOpen = not model.sideMenuOpen }, Cmd.none )
+            ( { model
+                | sideMenuOpen = not model.sideMenuOpen
+                , animate = not model.animate
+              }
+            , Cmd.none
+            )
 
         ImgLoaded src ->
             ( { model | loaded = Set.insert src model.loaded }, Cmd.none )
@@ -674,9 +601,9 @@ mainMenuView model =
                             ]
                             [ column
                                 [ width fill
-                                , height (px <| model.height - headerHeight model + mainMenuHeight model)
+                                , height (px <| model.height - (headerHeight model + mainMenuHeight model))
                                 , scrollbarY
-                                , spacing 100
+                                , spacing 75
                                 ]
                                 (List.map (itemView True) menuItems)
                             ]
