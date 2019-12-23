@@ -1,24 +1,12 @@
 port module Main exposing (..)
 
-import Animation
-    exposing
-        ( Animation
-        , animate
-        , animation
-        , duration
-        , ease
-        , from
-        , getDuration
-        , isDone
-        , retarget
-        , speed
-        , to
-        )
+import Animation exposing (..)
 import Browser exposing (..)
 import Browser.Events exposing (Visibility(..), onAnimationFrame, onResize, onVisibilityChange)
 import Browser.Navigation as Nav
 import Color exposing (..)
 import Dict exposing (..)
+import Dict.Extra exposing (filterMap)
 import Ease exposing (linear)
 import Element exposing (..)
 import Element.Background as Background
@@ -53,13 +41,25 @@ subscriptions model =
         [ scroll Scrolled
         , onResize WinResize
         , onVisibilityChange VisibilityChange
-        , if model.currentAnimation == Nothing then
+        , if
+            (model.currentAnimation == Nothing)
+                && (not <|
+                        Dict.Extra.any
+                            (\k (CustomAnim anim) -> isRunning model.clock anim.animation)
+                            model.customAnimations
+                   )
+          then
             Sub.none
 
           else
             onAnimationFrame Tick
         , if model.animate && (model.visibility == Visible) then
-            Time.every 6000 Animate
+            Time.every 6000 (Animate "slideShow")
+            --Dict.map (\_ (CustomAnim a) -> a.recurring) model.customAnimations
+            --    |> Dict.Extra.filterMap (\_ -> identity)
+            --    |> Dict.map (\k t -> Time.every t (Animate k))
+            --    |> Dict.values
+            --    |> Sub.batch
 
           else
             Sub.none
@@ -93,6 +93,7 @@ type alias Model =
     , visibility : Visibility
     , animate : Bool
     , currentAnimation : Maybe Animation
+    , customAnimations : Dict String CustomAnim
     , clock : Float
     , key : Nav.Key
     , url : Url.Url
@@ -102,6 +103,17 @@ type alias Model =
     , loaded : Set String
     , images : BiStream (List Image)
     }
+
+
+type CustomAnim
+    = CustomAnim
+        { name : String
+        , animation : Animation
+        , reversed : Bool
+        , recurring : Maybe Float
+        , startUpdate : Maybe (Model -> ( Model, Cmd Msg ))
+        , endUpdate : Maybe (Model -> ( Model, Cmd Msg ))
+        }
 
 
 type alias Image =
@@ -122,7 +134,7 @@ type alias Flags =
 type Msg
     = ChangeUrl Url.Url
     | ClickedLink UrlRequest
-    | Animate Posix
+    | Animate String Posix
     | Tick Posix
     | Scrolled Int
     | WinResize Int Int
@@ -170,6 +182,25 @@ init flags url key =
                 imgs
                 |> (\xs -> biStream xs (Image "" -1))
                 |> chunkBiStream 3
+
+        animations =
+            Dict.fromList
+                [ ( "slideShow"
+                  , CustomAnim
+                        { name = "slideShow"
+                        , animation =
+                            animation (toFloat flags.currentTime)
+                                |> from 1
+                                |> to 0
+                                |> duration 1500
+                                |> ease Ease.linear
+                        , reversed = False
+                        , recurring = Just 6000
+                        , startUpdate = Nothing
+                        , endUpdate = Nothing
+                        }
+                  )
+                ]
     in
     ( { headerVisible = True
       , scrollTop = flags.scrollTop
@@ -180,6 +211,7 @@ init flags url key =
       , visibility = Visible
       , animate = True
       , currentAnimation = Nothing
+      , customAnimations = animations
       , clock = toFloat flags.currentTime
       , key = key
       , url = url
@@ -239,32 +271,70 @@ update msg model =
                 Nothing ->
                     ( model, Cmd.none )
 
-        Animate time ->
-            let
-                newClock =
-                    toFloat <| posixToMillis time
+        Animate name time ->
+            case Dict.get name model.customAnimations of
+                Just (CustomAnim anim) ->
+                    let
+                        newClock =
+                            toFloat <| posixToMillis time
 
-                newAnim =
-                    case model.currentAnimation of
-                        Nothing ->
-                            Just
-                                (animation newClock
-                                    |> from 1
-                                    |> to 0
-                                    |> duration 1500
-                                    |> ease Ease.linear
-                                )
+                        newAnimation =
+                            let
+                                f =
+                                    getFrom anim.animation
 
-                        _ ->
-                            Nothing
-            in
-            ( { model | currentAnimation = newAnim }, Cmd.none )
+                                t =
+                                    getTo anim.animation
+
+                                d =
+                                    getDuration anim.animation
+
+                                e =
+                                    getEase anim.animation
+                            in
+                            animation newClock
+                                |> from f
+                                |> to t
+                                |> duration d
+                                |> ease e
+
+                        newAnim =
+                            case model.currentAnimation of
+                                Nothing ->
+                                    Just
+                                        (animation newClock
+                                            |> from 1
+                                            |> to 0
+                                            |> duration 1500
+                                            |> ease Ease.linear
+                                        )
+
+                                _ ->
+                                    Nothing
+                    in
+                    ( { model
+                        | currentAnimation = newAnim
+                        , customAnimations =
+                            Dict.insert name
+                                (CustomAnim { anim | animation = newAnimation })
+                                model.customAnimations
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( model, Cmd.none )
 
         Tick time ->
             let
                 newClock =
                     toFloat <| posixToMillis time
 
+                --(newAnimations, updates) =
+                --    Dict.foldr
+                --        (\k (CustomAnim anim) (anims, upd) ->
+                --            if isDone newClock anim then
+                --                )
                 ( newAnim, newImages ) =
                     case model.currentAnimation of
                         Just anim ->
@@ -290,12 +360,6 @@ update msg model =
                 | scrollTop = n
                 , headerVisible =
                     n == 0
-
-                --if model.headerVisible then
-                --    n == 0
-                --else
-                --    (model.scrollTop > mainMenuHeight model + headerHeight model)
-                --        && (n <= mainMenuHeight model + headerHeight model)
               }
             , Cmd.none
             )
@@ -363,7 +427,11 @@ view model =
                 , height (minimum (model.height - (headerHeight model + mainMenuHeight model)) fill)
                 , htmlAttribute <| HtmlAttr.id "appContainer"
                 , htmlAttribute <| HtmlAttr.style "-webkit-overflow-scrolling" "touch"
-                , scrollbarY
+                , if model.sideMenuOpen then
+                    noAttr
+
+                  else
+                    scrollbarY
                 ]
                 [ el
                     [ width fill
@@ -513,15 +581,22 @@ mainMenuView model =
         itemLenght =
             max 100 ((model.width - 40) // List.length menuItems)
 
-        itemView itemLink =
+        itemView isMobile itemLink =
             let
                 itemStyle =
-                    [ width (px itemLenght)
+                    if isMobile then
+                        [ width fill
+                        , padding 15
+                        , Font.center
+                        ]
 
-                    --, alignLeft
-                    , padding 15
-                    , pointer
-                    ]
+                    else
+                        [ width (px itemLenght)
+
+                        --, alignLeft
+                        , padding 15
+                        , pointer
+                        ]
             in
             case itemLink of
                 Internal path label mbAnchor ->
@@ -578,6 +653,34 @@ mainMenuView model =
                 [ row
                     [ width fill
                     , Background.color mainMenuBackgroundColor
+                    , inFront
+                        (column
+                            [ width <|
+                                if model.sideMenuOpen then
+                                    if model.width > 400 then
+                                        px 400
+
+                                    else
+                                        px model.width
+
+                                else
+                                    px 0
+                            , height fill
+                            , moveDown (mainMenuHeight model)
+                            , alignRight
+                            , clip
+                            , htmlAttribute <| HtmlAttr.style "transition" "width 0.2s ease-out"
+                            , Background.color (col white)
+                            ]
+                            [ column
+                                [ width fill
+                                , height (px <| model.height - headerHeight model + mainMenuHeight model)
+                                , scrollbarY
+                                , spacing 100
+                                ]
+                                (List.map (itemView True) menuItems)
+                            ]
+                        )
                     ]
                     [ el
                         [ alignLeft
@@ -589,31 +692,6 @@ mainMenuView model =
                         ]
                         sideMenuButton
                     ]
-                , column
-                    [ width <|
-                        if model.sideMenuOpen then
-                            if model.width > 400 then
-                                px 400
-
-                            else
-                                px model.width
-
-                        else
-                            px 0
-                    , if model.sideMenuOpen then
-                        height (px <| model.height - headerHeight model + mainMenuHeight model)
-
-                      else
-                        height (px 0)
-                    , alignRight
-                    , scrollbarY
-                    , htmlAttribute <| HtmlAttr.style "transition" "width 0.3s"
-
-                    --, htmlAttribute <| HtmlAttr.style "transition" "height 0.3s"
-                    , Background.color (col white)
-                    , clip
-                    ]
-                    (List.map itemView menuItems)
                 ]
 
         desktopView =
@@ -634,11 +712,11 @@ mainMenuView model =
                     ]
                     (el [ centerX ] (logoView 120))
                 , row
-                    [ width fill --(px <| model.width - 12)
+                    [ width fill
                     , height (px <| mainMenuHeight model)
                     , Background.color (Element.rgb255 166 174 195)
                     ]
-                    (List.map itemView menuItems)
+                    (List.map (itemView False) menuItems)
                 ]
     in
     case model.device.class of
