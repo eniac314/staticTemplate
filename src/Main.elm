@@ -2,9 +2,11 @@ port module Main exposing (..)
 
 import Animation exposing (..)
 import Browser exposing (..)
+import Browser.Dom exposing (focus, setViewport, setViewportOf)
 import Browser.Events exposing (Visibility(..), onAnimationFrame, onResize, onVisibilityChange)
 import Browser.Navigation as Nav
 import Color exposing (..)
+import Countries exposing (..)
 import Dict exposing (..)
 import Dict.Extra exposing (filterMap)
 import Ease exposing (linear)
@@ -24,13 +26,100 @@ import Internal.Scroll exposing (defaultConfig, scrollToWithOptions)
 import Internal.Streams exposing (..)
 import Ionicon
 import Ionicon.Android
-import Json.Decode as Decode
+import Ionicon.Ios
+import Json.Decode as D
+import List.Extra exposing (findIndex, getAt, remove)
 import Set exposing (..)
+import String.Extra exposing (toSentenceCase)
 import Task exposing (..)
 import Time exposing (..)
 import Url as Url
 import Url.Builder as UrlBuilder exposing (..)
 import Url.Parser as UrlParser exposing (..)
+
+
+type alias Image =
+    { src : String
+    , id : Int
+    }
+
+
+type alias Flags =
+    { currentTime : Int
+    , width : Int
+    , height : Int
+    , scrollTop : Int
+    , scrollbarWidth : Int
+    }
+
+
+type alias Path =
+    String
+
+
+type alias Anchor =
+    String
+
+
+type alias Label =
+    MlStr
+
+
+type alias ExternalUrl =
+    String
+
+
+type Link
+    = Internal Path Label (Maybe Anchor)
+    | External ExternalUrl Label
+
+
+type Widget
+    = LanguagePicker
+
+
+
+--# ********************************** #--
+--# ***** Multi language strings ***** #--
+
+
+type Language
+    = English
+    | Japanese
+
+
+languages =
+    [ English
+    , Japanese
+    ]
+
+
+type alias MlStr =
+    { en : String
+    , jp : String
+    }
+
+
+textM : Language -> MlStr -> Element msg
+textM lang mls =
+    case lang of
+        English ->
+            text mls.en
+
+        Japanese ->
+            text mls.jp
+
+
+mlsMap : (String -> String) -> MlStr -> MlStr
+mlsMap f { en, jp } =
+    MlStr (f en) (f jp)
+
+
+
+--# ***** Multi language strings ***** #--
+--# ********************************** #--
+--# ************************** #--
+--# ***** Initialisation ***** #--
 
 
 port scroll : (Int -> msg) -> Sub msg
@@ -56,6 +145,12 @@ subscriptions model =
                 onAnimationFrame (\_ -> SyncedUpdate msg)
 
             Nothing ->
+                Sub.none
+        , case model.openedWidget of
+            Just LanguagePicker ->
+                Browser.Events.onMouseDown (outsideTargetHandler "languagePicker" Close)
+
+            _ ->
                 Sub.none
         ]
 
@@ -86,70 +181,30 @@ type alias Model =
     , url : Url.Url
     , sideMenuOpen : Bool
     , updateOnNextFrame : Maybe Msg
-    , currentPosition : { path : Path, anchor : Maybe String }
     , loaded : Set String
     , images : BiStream (List Image)
+    , openedWidget : Maybe Widget
+    , lang : Language
     }
-
-
-type alias Image =
-    { src : String
-    , id : Int
-    }
-
-
-type alias Flags =
-    { currentTime : Int
-    , width : Int
-    , height : Int
-    , scrollTop : Int
-    , scrollbarWidth : Int
-    }
-
-
-type Msg
-    = ChangeUrl Url.Url
-    | ClickedLink UrlRequest
-    | Animate Posix
-    | Tick Posix
-    | Scrolled Int
-    | WinResize Int Int
-    | VisibilityChange Visibility
-    | SmoothScroll String
-    | SyncedUpdate Msg
-    | ToogleSideMenu
-    | ImgLoaded String
-    | NoOp
-
-
-type alias Path =
-    String
-
-
-type alias Anchor =
-    String
-
-
-type alias Label =
-    String
-
-
-type alias ExternalUrl =
-    String
-
-
-type Link
-    = Internal Path Label (Maybe Anchor)
-    | External ExternalUrl Label
 
 
 init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     let
+        device =
+            classifyDevice { width = flags.width, height = flags.height }
+
+        backgroundFolder =
+            if device.class == Phone || device.class == Tablet then
+                "regular"
+
+            else
+                "background"
+
         imgs =
-            [ "/assets/images/pic1.jpg"
-            , "/assets/images/pic2.jpg"
-            , "/assets/images/pic3.jpg"
+            [ "/assets/images/" ++ backgroundFolder ++ "/pic1.jpg"
+            , "/assets/images/" ++ backgroundFolder ++ "/pic2.jpg"
+            , "/assets/images/" ++ backgroundFolder ++ "/pic3.jpg"
             ]
 
         stream =
@@ -162,7 +217,7 @@ init flags url key =
     ( { headerVisible = True
       , scrollTop = flags.scrollTop
       , scrollbarWidth = flags.scrollbarWidth
-      , device = classifyDevice { width = flags.width, height = flags.height }
+      , device = device
       , width = flags.width
       , height = flags.height
       , visibility = Visible
@@ -170,15 +225,59 @@ init flags url key =
       , currentAnimation = Nothing
       , clock = toFloat flags.currentTime
       , key = key
-      , url = url
+      , url =
+            { url
+                | path =
+                    if url.path == "/index.html" then
+                        "/"
+
+                    else
+                        url.path
+            }
       , sideMenuOpen = False
-      , updateOnNextFrame = Nothing
-      , currentPosition = { path = "/home", anchor = Nothing }
+      , updateOnNextFrame =
+            case url.fragment of
+                Just anchor ->
+                    Just (SmoothScroll ("$$" ++ anchor))
+
+                Nothing ->
+                    Nothing
       , loaded = Set.empty
       , images = stream
+      , openedWidget = Nothing
+      , lang = English
       }
     , Cmd.none
+      --Task.perform (\_ -> NoOp) (setViewport 0 0)
     )
+
+
+
+--# ***** Initialisation ***** #--
+--# ************************** #--
+--# ****************** #--
+--# ***** Update ***** #--
+
+
+type Msg
+    = ChangeUrl Url.Url
+    | ClickedLink UrlRequest
+    | Animate Posix
+    | Tick Posix
+    | Scrolled Int
+    | WinResize Int Int
+    | Focus String
+    | VisibilityChange Visibility
+    | SmoothScroll String
+    | SyncedUpdate Msg
+    | ToogleSideMenu
+    | ImgLoaded String
+    | PickLanguage Language
+    | OpenLanguagePicker
+    | Close
+    | PrevLanguage
+    | NextLanguage
+    | NoOp
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -197,24 +296,23 @@ update msg model =
                 pathParser =
                     UrlParser.oneOf
                         [ UrlParser.map
-                            (\anchor -> ( "/home", anchor ))
+                            (\anchor -> ( "/", anchor ))
                             (UrlParser.top </> UrlParser.fragment identity)
                         , UrlParser.map
-                            (\anchor -> ( "/page1", anchor ))
-                            (UrlParser.s "page1" </> UrlParser.fragment identity)
+                            (\anchor -> ( "/about", anchor ))
+                            (UrlParser.s "about" </> UrlParser.fragment identity)
+                        , UrlParser.map
+                            (\anchor -> ( "/contact", anchor ))
+                            (UrlParser.s "contact" </> UrlParser.fragment identity)
                         ]
             in
             case UrlParser.parse pathParser url of
                 Just ( path, mbAnchor ) ->
                     ( { model
-                        | currentPosition =
-                            { path = path
-                            , anchor = mbAnchor
-                            }
-                        , updateOnNextFrame =
+                        | updateOnNextFrame =
                             case mbAnchor of
                                 Just anchor ->
-                                    Just (SmoothScroll anchor)
+                                    Just (SmoothScroll ("$$" ++ anchor))
 
                                 Nothing ->
                                     model.updateOnNextFrame
@@ -295,6 +393,9 @@ update msg model =
             , Cmd.none
             )
 
+        Focus id ->
+            ( model, Task.attempt (always NoOp) (focus id) )
+
         VisibilityChange visibility ->
             ( { model | visibility = visibility }, Cmd.none )
 
@@ -308,12 +409,78 @@ update msg model =
             ( { model
                 | sideMenuOpen = not model.sideMenuOpen
                 , animate = not model.animate
+                , updateOnNextFrame =
+                    -- probably unnecessary
+                    if model.sideMenuOpen then
+                        Just (Focus "appContainer")
+
+                    else
+                        Just (Focus "sideMenu")
               }
-            , Cmd.none
+            , if not model.sideMenuOpen then
+                Task.attempt (always NoOp) (setViewportOf "sideMenu" 0 0)
+
+              else
+                Cmd.none
             )
 
         ImgLoaded src ->
             ( { model | loaded = Set.insert src model.loaded }, Cmd.none )
+
+        PickLanguage lang ->
+            ( { model
+                | lang = lang
+                , openedWidget = Nothing
+              }
+            , Cmd.none
+            )
+
+        OpenLanguagePicker ->
+            ( { model
+                | openedWidget =
+                    if model.openedWidget == Just LanguagePicker then
+                        Nothing
+
+                    else
+                        Just LanguagePicker
+              }
+            , Cmd.none
+            )
+
+        Close ->
+            ( { model
+                | openedWidget = Nothing
+              }
+            , Cmd.none
+            )
+
+        PrevLanguage ->
+            let
+                prevLanguage =
+                    List.Extra.findIndex (\l -> l == model.lang) languages
+                        |> Maybe.andThen
+                            (\i ->
+                                List.Extra.getAt
+                                    (modBy (List.length languages) (i - 1))
+                                    languages
+                            )
+                        |> Maybe.withDefault model.lang
+            in
+            ( { model | lang = prevLanguage }, Cmd.none )
+
+        NextLanguage ->
+            let
+                nextLanguage =
+                    List.Extra.findIndex (\l -> l == model.lang) languages
+                        |> Maybe.andThen
+                            (\i ->
+                                List.Extra.getAt
+                                    (modBy (List.length languages) (i - 1))
+                                    languages
+                            )
+                        |> Maybe.withDefault model.lang
+            in
+            ( { model | lang = nextLanguage }, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
@@ -324,7 +491,7 @@ scrollTo model id =
         { defaultConfig
             | target = Just "appContainer"
             , offset =
-                if id == "appTop" then
+                if id == "top" then
                     headerHeight model + mainMenuHeight model
 
                 else
@@ -334,8 +501,10 @@ scrollTo model id =
 
 
 
--------------------------------------------------------------------------------
--- View functions --
+--# ***** Update ***** #--
+--# ****************** #--
+--# ************************** #--
+--# ***** View functions ***** #--
 
 
 view model =
@@ -363,12 +532,12 @@ view model =
                 [ el
                     [ width fill
                     , height (px <| headerHeight model + mainMenuHeight model)
-                    , htmlAttribute <| HtmlAttr.id "appTop"
+                    , htmlAttribute <| HtmlAttr.id "$$top"
                     ]
                     Element.none
                 , Dict.get
-                    model.currentPosition.path
-                    content
+                    model.url.path
+                    (content model)
                     |> Maybe.withDefault Element.none
                 , footerView model
                 ]
@@ -441,13 +610,13 @@ backgroundPicView model { src } attrs =
 
     else
         column
-            [ width fill
+            [ width (px model.width)
             , height (px model.height)
             ]
             [ html <|
                 Html.img
                     [ HtmlAttr.hidden True
-                    , HtmlEvents.on "load" (Decode.succeed (ImgLoaded src))
+                    , HtmlEvents.on "load" (D.succeed (ImgLoaded src))
                     , HtmlAttr.src src
                     ]
                     []
@@ -483,30 +652,47 @@ mainMenuHeight model =
             65
 
         Desktop ->
-            45
+            46
 
         BigDesktop ->
-            45
+            46
+
+
+mainMenuBackgroundColor =
+    --錆浅葱
+    Element.rgb255 106 127 122
+
+
+headerBackgroundColor =
+    --浅葱色
+    Element.rgb255 72 146 155
 
 
 menuItems =
-    [ Internal "/" "item 1" (Just "item1")
-    , Internal "/" "item 2" (Just "item2")
-    , Internal "/" "item 3" (Just "item3")
-    , Internal "/page1" "item 4" (Just "item4")
-    , Internal "/page1" "item 5" (Just "item5")
-    , Internal "/page2" "item 6" Nothing
-    , External "https://google.com" "google"
+    [ Internal "/" (MlStr "Home" "ホーム") (Just "top")
+    , Internal "/about" (MlStr "About" "春日江リトリートとは？") (Just "top")
+    , Internal "/contact" (MlStr "Contact" "お問い合わせ") (Just "top")
+    , Internal "/member" (MlStr "Member area" "メンバー・エリア") (Just "top")
     ]
 
 
 mainMenuView model =
     let
-        mainMenuBackgroundColor =
-            Element.rgb255 181 166 189
-
         itemLenght =
-            max 100 ((model.width - 40) // List.length menuItems)
+            max 100
+                (round <|
+                    toFloat
+                        (model.width
+                            - model.scrollbarWidth
+                            - (if model.headerVisible then
+                                0
+
+                               else
+                                105
+                              )
+                        )
+                        / toFloat (List.length menuItems)
+                )
 
         itemView isMobile itemLink =
             let
@@ -519,30 +705,58 @@ mainMenuView model =
 
                     else
                         [ width (px itemLenght)
-
-                        --, alignLeft
                         , padding 15
                         , pointer
+                        , htmlAttribute <| HtmlAttr.style "transition" "background-color 0.3s ease, width 0.3   s ease"
+                        , mouseOver
+                            [ Background.color
+                                (if isMobile then
+                                    col grey
+
+                                 else
+                                    col white
+                                )
+                            , Font.color (col black)
+                            ]
                         ]
             in
             case itemLink of
                 Internal path label mbAnchor ->
                     link
-                        itemStyle
+                        ((if isMobile then
+                            Background.color
+                                (if path == model.url.path then
+                                    col grey
+
+                                 else
+                                    col white
+                                )
+
+                          else
+                            Font.color
+                                (if path == model.url.path then
+                                    col white
+
+                                 else
+                                    col black
+                                )
+                         )
+                            :: itemStyle
+                        )
                         { url =
                             UrlBuilder.custom
                                 Relative
                                 (String.split "/" path)
                                 []
                                 mbAnchor
-                        , label = el [ centerX ] (text label)
+                        , label = el [ centerX ] (textM model.lang label)
                         }
 
                 External externalUrl label ->
                     newTabLink
                         itemStyle
                         { url = externalUrl
-                        , label = el [ centerX ] (text label)
+                        , label = el [ centerX ] (textM model.lang label)
                         }
 
         sideMenuButton =
@@ -562,16 +776,58 @@ mainMenuView model =
                     grey
                 )
 
-        logoView size =
+        logoView isMobile =
+            let
+                referenceHeight =
+                    if isMobile then
+                        mainMenuHeight model
+
+                    else
+                        headerHeight model
+            in
             link
-                [ pointer ]
+                [ pointer
+                ]
                 { url =
                     UrlBuilder.custom
                         Relative
                         (String.split "/" "/")
                         []
-                        (Just "appTop")
-                , label = viewIcon Ionicon.aperture size grey
+                        (Just "top")
+                , label =
+                    row
+                        [ spacing 15
+                        ]
+                        [ el
+                            [ width (px <| round ((toFloat <| referenceHeight) * 1.1696))
+                            , height (px <| referenceHeight)
+
+                            --, Background.uncropped "/assets/images/artwork/logo.svg"
+                            , Background.uncropped <| "https://via.placeholder.com/" ++ String.fromInt referenceHeight
+                            ]
+                            Element.none
+                        , column
+                            [ Font.size
+                                (if isMobile then
+                                    22
+
+                                 else
+                                    45
+                                )
+                            , Font.family
+                                [ Font.typeface ""
+                                , Font.sansSerif
+                                ]
+                            ]
+                            (if isMobile then
+                                [ el [ centerX ] (textM model.lang (MlStr "My" ""))
+                                , el [ centerX ] (textM model.lang (MlStr "static webapp" ""))
+                                ]
+
+                             else
+                                [ textM model.lang (MlStr "My static webapp" "") ]
+                            )
+                        ]
                 }
 
         mobileView =
@@ -579,7 +835,8 @@ mainMenuView model =
                 [ width fill ]
                 [ row
                     [ width fill
-                    , Background.color mainMenuBackgroundColor
+                    , height (px <| mainMenuHeight model)
+                    , Background.color headerBackgroundColor
                     , inFront
                         (column
                             [ width <|
@@ -599,20 +856,33 @@ mainMenuView model =
                             , htmlAttribute <| HtmlAttr.style "transition" "width 0.2s ease-out"
                             , Background.color (col white)
                             ]
-                            [ column
+                            [ el
                                 [ width fill
                                 , height (px <| model.height - (headerHeight model + mainMenuHeight model))
                                 , scrollbarY
-                                , spacing 75
+                                , htmlAttribute <| HtmlAttr.id "sideMenu"
+                                , spacing 30
                                 ]
-                                (List.map (itemView True) menuItems)
+                                -- for some reason the padding can't be in the sideMenu container
+                                -- or it does not work in safari ios
+                                (column
+                                    [ width fill
+                                    , spacing 30
+                                    , paddingXY 0 15
+                                    ]
+                                    [ mobileLanguagePickerView model.lang
+                                    , column [ width fill ]
+                                        (List.map (itemView True) menuItems)
+                                    ]
+                                )
                             ]
                         )
                     ]
                     [ el
                         [ alignLeft
+                        , paddingXY 15 0
                         ]
-                        (logoView 65)
+                        (logoView True)
                     , el
                         [ alignRight
                         , centerY
@@ -624,9 +894,16 @@ mainMenuView model =
         desktopView =
             column
                 [ width (px <| model.width - model.scrollbarWidth)
+                , inFront <|
+                    el [ alignRight ]
+                        (languagePickerView
+                            (model.openedWidget == Just LanguagePicker)
+                            (mainMenuHeight model)
+                            model.lang
+                        )
                 ]
                 [ el
-                    [ Background.color mainMenuBackgroundColor
+                    [ Background.color headerBackgroundColor
                     , width fill
                     , height <|
                         if model.headerVisible then
@@ -637,11 +914,15 @@ mainMenuView model =
                     , htmlAttribute <| HtmlAttr.style "transition" "height 0.3s"
                     , clip
                     ]
-                    (el [ centerX ] (logoView 120))
+                    (el
+                        [ centerX
+                        ]
+                        (logoView False)
+                    )
                 , row
                     [ width fill
                     , height (px <| mainMenuHeight model)
-                    , Background.color (Element.rgb255 166 174 195)
+                    , Background.color mainMenuBackgroundColor
                     ]
                     (List.map (itemView False) menuItems)
                 ]
@@ -662,30 +943,388 @@ mainMenuView model =
 
 
 -------------------------------------------------------------------------------
---footerView
+-- Language picker View
 
 
-footerView model =
-    column
+flagIcon code =
+    Countries.fromCode code
+        |> Maybe.map .flag
+        |> Maybe.withDefault ""
+
+
+languageView width_ lang =
+    case lang of
+        English ->
+            row
+                [ width_
+                , centerY
+                ]
+                [ text "English"
+                , el
+                    [ alignRight ]
+                    (text <| flagIcon "GB")
+                ]
+
+        Japanese ->
+            row
+                [ width_
+                , centerY
+                ]
+                [ text "日本語"
+                , el
+                    [ alignRight ]
+                    (text <| flagIcon "JP")
+                ]
+
+
+mobileLanguagePickerView : Language -> Element Msg
+mobileLanguagePickerView currentLang =
+    row
         [ width fill ]
-        [ link []
-            { url =
-                UrlBuilder.custom
-                    Relative
-                    (String.split "/" "/")
-                    []
-                    (Just "appTop")
-            , label = text "top"
-            }
+        [ el
+            [ onClick PrevLanguage ]
+            (viewIcon
+                Ionicon.Ios.arrowBack
+                40
+                grey
+            )
+        , el
+            [ width fill
+            ]
+            (el [ centerX ]
+                (languageView (width (px 85)) currentLang)
+            )
+        , el
+            [ onClick NextLanguage
+
+            --, centerY
+            --, alignRight
+            ]
+            (viewIcon
+                Ionicon.Ios.arrowForward
+                40
+                grey
+            )
         ]
+
+
+languagePickerView : Bool -> Int -> Language -> Element Msg
+languagePickerView isOpen itemHeight currentLang =
+    let
+        pickerWidth =
+            85
+
+        selectView =
+            column
+                [ Background.color mainMenuBackgroundColor
+                ]
+                (List.map itemView (List.Extra.remove currentLang languages))
+
+        itemView lang =
+            el
+                [ width fill
+                , height (px itemHeight)
+                , paddingXY 15 0
+                , onClick (PickLanguage lang)
+                , pointer
+                , htmlAttribute <| HtmlAttr.style "transition" "background-color 0.3s ease"
+                , mouseOver
+                    [ Background.color (col white) ]
+                ]
+                (languageView (width (px pickerWidth)) lang)
+
+        buttonStyle =
+            [ focused [ Border.glow (Element.rgb 1 1 1) 0 ]
+            ]
+    in
+    el
+        [ if isOpen then
+            below selectView
+
+          else
+            noAttr
+        , htmlAttribute <| HtmlAttr.id "languagePicker"
+        ]
+        (Input.button
+            buttonStyle
+            { onPress =
+                Just OpenLanguagePicker
+            , label =
+                el
+                    [ paddingXY 15 0
+                    , height (px itemHeight)
+                    , htmlAttribute <| HtmlAttr.style "transition" "background-color 0.3s ease"
+                    , mouseOver
+                        [ Background.color (col white) ]
+                    ]
+                    (languageView (width (px pickerWidth)) currentLang)
+            }
+        )
 
 
 
 -------------------------------------------------------------------------------
+--footerView
+
+
+footerView model =
+    let
+        isMobile_ =
+            model.device.class == Phone || model.device.class == Tablet
+
+        itemView isMobile itemLink =
+            let
+                itemStyle =
+                    if isMobile then
+                        [ width fill
+                        , padding 7
+                        , Font.center
+                        ]
+
+                    else
+                        [ pointer
+                        , htmlAttribute <| HtmlAttr.style "transition" "background-color 0.3s ease, width 0.3   s ease"
+                        , mouseOver
+                            [ Font.color (col white)
+                            ]
+                        ]
+            in
+            case itemLink of
+                Internal path label mbAnchor ->
+                    link
+                        itemStyle
+                        { url =
+                            UrlBuilder.custom
+                                Relative
+                                (String.split "/" path)
+                                []
+                                mbAnchor
+                        , label = el [ centerX ] (textM model.lang label)
+                        }
+
+                External externalUrl label ->
+                    newTabLink
+                        itemStyle
+                        { url = externalUrl
+                        , label = el [ centerX ] (textM model.lang label)
+                        }
+
+        referenceHeight =
+            150
+    in
+    column
+        [ width fill
+        , Background.color
+            --浅葱色
+            (Element.rgb255 72 146 155)
+        , paddingXY 0 15
+        , spacing 30
+        ]
+        [ (if isMobile_ then
+            column
+                [ centerX
+                ]
+
+           else
+            row
+                [ spacing 30
+                , centerX
+                ]
+          )
+            (List.map (itemView isMobile_) menuItems)
+        , row
+            [ spacing 15
+            , centerX
+            ]
+            [ textM model.lang (MlStr "Contact number:" "お問い合わせ電話番号:")
+            , text "075497483543"
+            ]
+        , if isMobile_ then
+            Element.none
+
+          else
+            el
+                [ width (px <| round ((toFloat <| referenceHeight) * 1.1696))
+                , height (px <| referenceHeight)
+
+                --, Background.uncropped "/assets/images/artwork/logoW.svg"
+                , Background.uncropped <| "https://via.placeholder.com/" ++ String.fromInt referenceHeight
+                , centerX
+                ]
+                Element.none
+        ]
+
+
+
+--# ***** View functions ***** #--
+--# ************************** #--
+-------------------------------------------------------------------------------
+--# ******************* #--
+--# ***** Content ***** #--
+
+
+homePageBlockRow model meta =
+    chunkedRows
+        (min model.width 1000)
+        20
+        (bestFit 300 20)
+        (List.map (homePageBlockView model) meta)
+
+
+homePageBlockView model block =
+    el [ paddingXY 0 0 ]
+        (link
+            [ htmlAttribute <| HtmlAttr.style "transition" "background-color 0.3s ease"
+            , mouseOver
+                [ Background.color (colA white 0.8)
+                ]
+            , Border.rounded 10
+            ]
+            { url =
+                UrlBuilder.custom
+                    Relative
+                    (String.split "/" block.path)
+                    []
+                    block.anchor
+            , label =
+                row
+                    [ width (px 250)
+                    , height (px 150)
+                    , Border.rounded 10
+                    , Background.color (colA white 0.6)
+                    , centerX
+                    , centerY
+                    ]
+                    [ el
+                        [ width (fillPortion 1)
+                        , height fill
+                        , Background.image block.pic
+                        , Border.roundEach
+                            { topLeft = 10
+                            , topRight = 0
+                            , bottomLeft = 10
+                            , bottomRight = 100
+                            }
+                        ]
+                        Element.none
+                    , el
+                        [ width (fillPortion 2)
+                        , height fill
+                        ]
+                        (paragraph [ centerY, Font.center ]
+                            [ textM model.lang <| mlsMap toSentenceCase block.label ]
+                        )
+                    ]
+            }
+        )
+
+
+content : Model -> Dict String (Element Msg)
+content model =
+    Dict.fromList
+        [ ( "/"
+          , column
+                [ width fill
+                ]
+                [ column
+                    [ width fill
+                    , spacing 20
+                    , paddingXY 0 20
+                    , height (minimum (model.height - headerHeight model - mainMenuHeight model - 30) fill)
+                    ]
+                    (homePageBlockRow model
+                        [ { label = MlStr "Link 1" ""
+                          , path = "/about#"
+                          , anchor = Nothing
+                          , pic = "/assets/images/thumbs/pic1.jpg"
+                          }
+                        , { label = MlStr "Link 2" ""
+                          , path = "/about#"
+                          , anchor = Nothing
+                          , pic = "/assets/images/thumbs/pic2.jpg"
+                          }
+                        ]
+                    )
+                , defaultContainer ""
+                    [ el
+                        [ Font.bold
+                        , Font.size 22
+                        ]
+                        (textM model.lang (MlStr "Title" "タイトル"))
+                    , paragraph
+                        []
+                        [ textM model.lang
+                            (MlStr "Proin vitae lobortis leo. Maecenas sed rhoncus mi, at lobortis augue. Sed sollicitudin libero non varius aliquet. Quisque eget euismod ligula, sodales tristique nunc. Maecenas diam leo, pulvinar quis lobortis at, rutrum at turpis. Curabitur ac lorem vitae tellus rhoncus finibus vitae in arcu. Maecenas eleifend diam ut interdum rutrum. Ut eget pharetra dui. Quisque eget nibh sit amet mauris tincidunt dapibus at at diam. Nunc euismod leo ligula, eget mattis mi porttitor eu. Quisque nec justo at augue cursus cursus. Sed odio turpis, laoreet nec eleifend nec, venenatis eu enim. Nullam a felis dolor. Phasellus varius ultrices dui vulputate dictum. Integer magna arcu, porta eget orci ut, rhoncus consectetur turpis. Integer sodales tortor urna, eu maximus ipsum ullamcorper et."
+                                "民どぐ協8回く相面ン便社びす都嘉エ発両じ線東サコキリ長井在モサセケ草改免トフ投的きかトれ大展ゅよ帰軽抗はろ。般カニヒ大的ーだは紙無ぽフ新定官62情緒ルロヒ未愛マムレ水呆クム集別ね党強ゃ刈短せ年北びン。田キコ能局コタ比竹リヌロ童事徳田化然コヲナヒ話97堂れぎへに他業ばイ問外ニハヤ原竹ニキマ使兵ぼ突社よぐまレ平4人も脳国たで告林ムイ都用府べ。"
+                            )
+                        ]
+                    , paragraph
+                        []
+                        [ textM model.lang
+                            (MlStr "Sed lectus arcu, pellentesque ut interdum eu, pharetra et neque. Etiam tempor neque ut nulla aliquet maximus aliquam vitae eros. Suspendisse rhoncus ipsum vitae ex suscipit, eu mollis diam imperdiet. Ut eu tortor hendrerit nisi sollicitudin auctor quis a est. Sed a volutpat elit. Donec et nunc vitae dolor consequat cursus. Cras eget ante vel tortor tempus blandit quis vel arcu. "
+                                "真よル田保フシリ像87国ゆにえ面載ッーけ康話ムソオシ支続ルキヨ議護ヒイツ析条ワヱキ開側ゃぎぱ社月すうドス経協きーフ優壊筆研くフド。名セ超気かえー敗図石カヘヒモ由芸伴げッづぽ含止条ムレ約面ゃ目絶書トヲウニ減情リ葉高度づや粧断ッさ読覧ひくゆな舎督ナハ体昭ふづむね的首せくゆ機護検帯でひわー。金しま約94空提べな描馬ソ熊荷ワユ市割クホ住傳チ力4約庭なぼる速18尚徒阿わえが。"
+                            )
+                        ]
+                    , showImages model
+                        [ { url = "/assets/images/regular/pic1.jpg"
+                          , caption = Nothing
+                          , size = { height = 450, width = 600 }
+                          }
+                        , { url = "/assets/images/regular/pic2.jpg"
+                          , caption = Nothing
+                          , size = { height = 450, width = 600 }
+                          }
+                        , { url = "/assets/images/regular/pic3.jpg"
+                          , caption = Nothing
+                          , size = { height = 450, width = 600 }
+                          }
+                        ]
+                    ]
+                , el
+                    [ height (px 200)
+                    ]
+                    Element.none
+                ]
+          )
+        , ( "/about"
+          , column
+                [ width fill ]
+                [ column
+                    [ width fill
+                    , spacing 20
+                    , height (minimum (model.height - headerHeight model - mainMenuHeight model - 30) fill)
+                    ]
+                    []
+                ]
+          )
+        , ( "/contact"
+          , column
+                [ width fill ]
+                [ column
+                    [ width fill
+                    , spacing 20
+                    , height (minimum (model.height - headerHeight model - mainMenuHeight model - 30) fill)
+                    ]
+                    []
+                ]
+          )
+        ]
+
+
+
+--# ***** Content ***** #--
+--# ******************* #--
+-------------------------------------------------------------------------------
+--# ************************ #--
+--# ***** Misc helpers ***** #--
+
+
+defaultwidth_ =
+    1000
 
 
 defaultwidth =
-    width (maximum 1000 fill)
+    width (maximum defaultwidth_ fill)
 
 
 defaultContainerStyle =
@@ -693,7 +1332,25 @@ defaultContainerStyle =
     , centerX
     , padding 15
     , spacing 15
+
+    --, Background.tiled "/assets/images/background/namiT.png"
     ]
+
+
+defaultContainer : String -> List (Element Msg) -> Element Msg
+defaultContainer id contents =
+    el
+        [ width fill
+        , padding 15
+        , Background.color (col white)
+        , htmlAttribute <| HtmlAttr.id ("$$" ++ id)
+
+        --, Background.color (col white)
+        ]
+        (column
+            defaultContainerStyle
+            contents
+        )
 
 
 noAttr =
@@ -705,27 +1362,11 @@ sides =
 
 
 
+--# ***** Misc helpers ***** #--
+--# ************************ #--
 -------------------------------------------------------------------------------
-
-
-col : Color.Color -> Element.Color
-col c =
-    Color.toRgba c
-        |> (\c_ ->
-                Element.rgba c_.red c_.green c_.blue c_.alpha
-           )
-
-
-colA : Color.Color -> Float -> Element.Color
-colA c a =
-    Color.toRgba c
-        |> (\c_ ->
-                Element.rgba c_.red c_.green c_.blue a
-           )
-
-
-
--------------------------------------------------------------------------------
+--# ******************************** #--
+--# ***** Icons View functions ***** #--
 
 
 type alias RGBA =
@@ -749,68 +1390,229 @@ viewIcon icon size color =
 
 
 
+--# ***** Icons View functions ***** #--
+--# ******************************** #--
 -------------------------------------------------------------------------------
--- Content
+--# *************************** #--
+--# ***** Color functions ***** #--
 
 
-content : Dict String (Element msg)
-content =
-    Dict.fromList
-        [ ( "/home"
-          , column
-                [ width fill
-                , spacing 15
-                ]
-                [ el
-                    [ height (px 200)
-                    ]
-                    Element.none
-                , el
-                    [ width fill
-                    , padding 15
-                    , Background.color (col white)
-                    , htmlAttribute <| HtmlAttr.id "item1"
-                    , Background.color (col white)
-                    ]
-                    (column
-                        defaultContainerStyle
-                        [ el
-                            [ Font.bold
-                            , Font.size 22
-                            ]
-                            (text "Item 1")
-                        , paragraph
-                            []
-                            [ text "Proin vitae lobortis leo. Maecenas sed rhoncus mi, at lobortis augue. Sed sollicitudin libero non varius aliquet. Quisque eget euismod ligula, sodales tristique nunc. Maecenas diam leo, pulvinar quis lobortis at, rutrum at turpis. Curabitur ac lorem vitae tellus rhoncus finibus vitae in arcu. Maecenas eleifend diam ut interdum rutrum. Ut eget pharetra dui. Quisque eget nibh sit amet mauris tincidunt dapibus at at diam. Nunc euismod leo ligula, eget mattis mi porttitor eu. Quisque nec justo at augue cursus cursus. Sed odio turpis, laoreet nec eleifend nec, venenatis eu enim. Nullam a felis dolor. Phasellus varius ultrices dui vulputate dictum. Integer magna arcu, porta eget orci ut, rhoncus consectetur turpis. Integer sodales tortor urna, eu maximus ipsum ullamcorper et. " ]
-                        ]
-                    )
-                , el
-                    [ height (px 200)
-                    ]
-                    Element.none
-                , el
-                    [ width fill
-                    , padding 15
-                    , Background.color (col white)
-                    , htmlAttribute <| HtmlAttr.id "item2"
-                    , Background.color (col white)
-                    ]
-                    (column
-                        defaultContainerStyle
-                        [ el
-                            [ Font.bold
-                            , Font.size 22
-                            ]
-                            (text "Item 2")
-                        , paragraph
-                            []
-                            [ text "Proin vitae lobortis leo. Maecenas sed rhoncus mi, at lobortis augue. Sed sollicitudin libero non varius aliquet. Quisque eget euismod ligula, sodales tristique nunc. Maecenas diam leo, pulvinar quis lobortis at, rutrum at turpis. Curabitur ac lorem vitae tellus rhoncus finibus vitae in arcu. Maecenas eleifend diam ut interdum rutrum. Ut eget pharetra dui. Quisque eget nibh sit amet mauris tincidunt dapibus at at diam. Nunc euismod leo ligula, eget mattis mi porttitor eu. Quisque nec justo at augue cursus cursus. Sed odio turpis, laoreet nec eleifend nec, venenatis eu enim. Nullam a felis dolor. Phasellus varius ultrices dui vulputate dictum. Integer magna arcu, porta eget orci ut, rhoncus consectetur turpis. Integer sodales tortor urna, eu maximus ipsum ullamcorper et. " ]
-                        , paragraph
-                            []
-                            [ text "Interdum et malesuada fames ac ante ipsum primis in faucibus. Morbi convallis consectetur vulputate. Integer ut mauris mauris. Sed ornare aliquam tortor id eleifend. Integer facilisis elit id erat dapibus, eget efficitur odio elementum. Curabitur in lacus ultrices, convallis ex et, tristique ante. Morbi at pharetra lorem, tincidunt viverra ligula. Vestibulum pharetra magna a turpis fringilla finibus. Nullam nec diam nulla. Aliquam a elit ullamcorper, auctor diam in, maximus libero. "
-                            ]
-                        ]
-                    )
-                ]
-          )
+col : Color.Color -> Element.Color
+col c =
+    Color.toRgba c
+        |> (\c_ ->
+                Element.rgba c_.red c_.green c_.blue c_.alpha
+           )
+
+
+colA : Color.Color -> Float -> Element.Color
+colA c a =
+    Color.toRgba c
+        |> (\c_ ->
+                Element.rgba c_.red c_.green c_.blue a
+           )
+
+
+
+--# ***** Color functions ***** #--
+--# *************************** #--
+-------------------------------------------------------------------------------
+--# ************************* #--
+--# ***** Chunked rows  ***** #--
+
+
+chunkedRows : Int -> Int -> (Int -> Int) -> List (Element msg) -> List (Element msg)
+chunkedRows width spacing_ chunkBy elems =
+    let
+        nbrChunks =
+            chunkBy width
+
+        chunks =
+            chunklist nbrChunks elems
+    in
+    List.map
+        (row
+            [ centerX
+            , centerY
+            , spacing spacing_
+            ]
+        )
+        chunks
+
+
+chunklist : Int -> List a -> List (List a)
+chunklist n xs =
+    let
+        helper acc ys =
+            case ys of
+                [] ->
+                    List.reverse acc
+
+                _ ->
+                    helper (List.take n ys :: acc) (List.drop n ys)
+    in
+    helper [] xs
+
+
+bestFit : Int -> Int -> Int -> Int
+bestFit elemWidth spacing_ width =
+    let
+        nbrChunks_ =
+            width // elemWidth
+
+        spacing =
+            (nbrChunks_ - 1) * spacing_
+    in
+    if (nbrChunks_ * elemWidth + spacing) < width then
+        nbrChunks_
+
+    else
+        nbrChunks_ - 1
+
+
+
+--# ***** Chunked rows  ***** #--
+--# ************************* #--
+-------------------------------------------------------------------------------
+--# ********************************* #--
+--# ***** Same height image row ***** #--
+
+
+type alias ImageMeta =
+    { url : String
+    , caption : Maybe String
+    , size : { height : Int, width : Int }
+    }
+
+
+showImages model images =
+    if model.width < defaultwidth_ then
+        column
+            [ spacing 15
+            , centerX
+            ]
+            (List.map
+                (\{ url, caption } ->
+                    image
+                        [ width (maximum model.width fill) ]
+                        { src = url
+                        , description =
+                            Maybe.withDefault "" caption
+                        }
+                )
+                images
+            )
+
+    else
+        sameHeightImgRow images
+
+
+sameHeightImgRow : List ImageMeta -> Element msg
+sameHeightImgRow images =
+    let
+        images_ =
+            List.map
+                (\meta ->
+                    { meta = meta
+                    , newWidth = 0
+                    , newHeight = 0
+                    }
+                )
+                images
+
+        imgSizes imgs =
+            List.map (\i -> i.meta.size) imgs
+
+        minHeight imgs =
+            imgSizes imgs
+                |> List.map .height
+                |> List.sort
+                |> List.head
+                |> Maybe.withDefault 0
+
+        imgsScaledToMinHeight =
+            let
+                mh =
+                    minHeight images_
+
+                scale { meta } =
+                    { meta = meta
+                    , newHeight = toFloat mh + 5
+                    , newWidth =
+                        toFloat mh
+                            * toFloat meta.size.width
+                            / toFloat meta.size.height
+                    }
+            in
+            List.map scale images_
+
+        totalImgWidth =
+            List.foldr (\i n -> i.newWidth + n) 0 imgsScaledToMinHeight
+    in
+    Keyed.row
+        [ spacing 15
         ]
+        (List.indexedMap
+            (\i im ->
+                ( String.fromInt (i * List.length imgsScaledToMinHeight)
+                , el
+                    [ width <| fillPortion (floor <| 10000 * im.newWidth / totalImgWidth)
+                    ]
+                    (html <|
+                        Html.img
+                            [ HtmlAttr.style "width" "100%"
+                            , HtmlAttr.style "height" "auto"
+                            , HtmlAttr.src im.meta.url
+                            ]
+                            []
+                    )
+                )
+            )
+            imgsScaledToMinHeight
+        )
+
+
+
+--# ***** Same height image row ***** #--
+--# ********************************* #--
+-------------------------------------------------------------------------------
+--# ********************************* #--
+--# ***** Outside click decoder ***** #--
+
+
+outsideTargetHandler : String -> msg -> D.Decoder msg
+outsideTargetHandler targetId handler =
+    D.field "target" (isOutsideTarget targetId)
+        |> D.andThen
+            (\isOutside ->
+                if isOutside then
+                    D.succeed handler
+
+                else
+                    D.fail "inside target"
+            )
+
+
+isOutsideTarget targetId =
+    D.oneOf
+        [ D.field "id" D.string
+            |> D.andThen
+                (\id ->
+                    if targetId == id then
+                        -- found match by id
+                        D.succeed False
+
+                    else
+                        -- try next decoder
+                        D.fail "continue"
+                )
+        , D.lazy (\_ -> D.field "parentNode" (isOutsideTarget targetId))
+
+        -- fallback if all previous decoders failed
+        , D.succeed True
+        ]
+
+
+
+--# ***** Outside click decoder ***** #--
+--# ********************************* #--

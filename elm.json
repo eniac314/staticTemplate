@@ -15,11 +15,15 @@
             "elm/url": "1.0.0",
             "elm-community/dict-extra": "2.4.0",
             "elm-community/easing-functions": "2.0.0",
+            "elm-community/list-extra": "8.2.2",
+            "elm-community/string-extra": "4.0.1",
             "j-panasiuk/elm-ionicons": "2.0.0",
             "mdgriffith/elm-ui": "1.1.5",
-            "mgold/elm-animation": "2.0.0"
+            "mgold/elm-animation": "2.0.0",
+            "supermario/elm-countries": "1.0.4"
         },
         "indirect": {
+            "elm/regex": "1.0.0",
             "elm/svg": "1.0.1",
             "elm/virtual-dom": "1.0.2"
         }
